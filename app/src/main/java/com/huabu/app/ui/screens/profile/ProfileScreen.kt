@@ -38,6 +38,7 @@ fun ProfileScreen(
     onNavigateToMessages: () -> Unit,
     onNavigateToProfile: (String) -> Unit,
     onNavigateToThemeEditor: (String) -> Unit = {},
+    onNavigateToEditProfile: (String) -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -82,7 +83,8 @@ fun ProfileScreen(
                 onFollowClick = { viewModel.toggleFollow() },
                 onMessageClick = onNavigateToMessages,
                 onCustomiseClick = { showWidgetSettings = true },
-                onEditThemeClick = { onNavigateToThemeEditor(userId) }
+                onEditThemeClick = { onNavigateToThemeEditor(userId) },
+                onEditProfileClick = { onNavigateToEditProfile(userId) }
             )
         }
 
@@ -229,7 +231,8 @@ private fun ProfileInfoCard(
     onFollowClick: () -> Unit,
     onMessageClick: () -> Unit,
     onCustomiseClick: () -> Unit = {},
-    onEditThemeClick: () -> Unit = {}
+    onEditThemeClick: () -> Unit = {},
+    onEditProfileClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -377,7 +380,7 @@ private fun ProfileInfoCard(
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(
-                        onClick = {},
+                        onClick = onEditProfileClick,
                         colors = ButtonDefaults.buttonColors(containerColor = HuabuSurface),
                         shape = RoundedCornerShape(20.dp)
                     ) {

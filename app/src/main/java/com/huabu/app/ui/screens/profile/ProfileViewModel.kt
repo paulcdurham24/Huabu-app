@@ -97,6 +97,13 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    fun saveUser(user: User) {
+        _uiState.update { it.copy(user = user) }
+        viewModelScope.launch {
+            userDao.insertUser(user)
+        }
+    }
+
     fun toggleFollow() {
         _uiState.update { it.copy(isFollowing = !it.isFollowing) }
     }

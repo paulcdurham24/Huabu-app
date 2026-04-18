@@ -18,6 +18,7 @@ import com.huabu.app.ui.screens.friends.FriendsScreen
 import com.huabu.app.ui.screens.messages.MessagesScreen
 import com.huabu.app.ui.screens.profile.ProfileScreen
 import com.huabu.app.ui.screens.profile.ProfileThemeEditor
+import com.huabu.app.ui.screens.profile.EditProfileScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.huabu.app.ui.screens.profile.ProfileViewModel
 import com.huabu.app.ui.screens.search.SearchScreen
@@ -38,6 +39,9 @@ sealed class Screen(val route: String) {
     object ThemeEditor : Screen("theme_editor/{userId}") {
         fun createRoute(userId: String) = "theme_editor/$userId"
     }
+    object EditProfile : Screen("edit_profile/{userId}") {
+        fun createRoute(userId: String) = "edit_profile/$userId"
+    }
 }
 
 val bottomNavScreens = listOf(Screen.Feed, Screen.Friends, Screen.Messages, Screen.Search)
@@ -51,6 +55,7 @@ fun HuabuNavGraph() {
     val bottomRoutes = setOf(Screen.Feed.route, Screen.Friends.route, Screen.Messages.route, Screen.Search.route)
     val showBottomBar = currentRoute in bottomRoutes || currentRoute?.startsWith("profile/") == true
     val hideBottomBar = currentRoute?.startsWith("theme_editor/") == true
+        || currentRoute?.startsWith("edit_profile/") == true
 
     Scaffold(
         bottomBar = {
@@ -98,6 +103,9 @@ fun HuabuNavGraph() {
                     },
                     onNavigateToThemeEditor = { uid ->
                         navController.navigate(Screen.ThemeEditor.createRoute(uid))
+                    },
+                    onNavigateToEditProfile = { uid ->
+                        navController.navigate(Screen.EditProfile.createRoute(uid))
                     }
                 )
             }
@@ -121,6 +129,26 @@ fun HuabuNavGraph() {
                         navController.navigate(Screen.Profile.createRoute(userId))
                     }
                 )
+            }
+            composable(
+                route = Screen.EditProfile.route,
+                arguments = listOf(navArgument("userId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val userId = backStackEntry.arguments?.getString("userId") ?: "me"
+                val viewModel: ProfileViewModel = hiltViewModel()
+                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+                androidx.compose.runtime.LaunchedEffect(userId) { viewModel.loadProfile(userId) }
+                val user = uiState.user
+                if (user != null) {
+                    EditProfileScreen(
+                        user = user,
+                        onSave = { updated ->
+                            viewModel.saveUser(updated)
+                            navController.popBackStack()
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
             composable(
                 route = Screen.ThemeEditor.route,
