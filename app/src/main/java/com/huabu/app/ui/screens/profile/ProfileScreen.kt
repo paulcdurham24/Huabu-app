@@ -84,71 +84,43 @@ fun ProfileScreen(
             )
         }
 
-        // Profile Song Widget
-        item {
-            if (uiState.widgetSettings.showProfileSong && user.profileSong.isNotEmpty()) {
-                ProfileSongWidget(song = user.profileSong, artist = user.profileSongArtist)
-            }
-        }
-
-        // Photo Gallery
-        item {
-            if (uiState.widgetSettings.showPhotoGallery && uiState.photos.isNotEmpty()) {
-                PhotoGalleryWidget(
-                    photos = uiState.photos,
-                    isCurrentUser = uiState.isCurrentUser,
-                    onPhotoClick = {},
-                    onFrameChange = { _, _ -> }
-                )
-            }
-        }
-
-        // Video Links
-        item {
-            if (uiState.widgetSettings.showVideoLinks && uiState.videoLinks.isNotEmpty()) {
-                VideoLinksWidget(
-                    videos = uiState.videoLinks,
-                    isCurrentUser = uiState.isCurrentUser
-                )
-            }
-        }
-
-        // Top 5 Music
-        item {
-            if (uiState.widgetSettings.showTopMusic && uiState.topMusic.isNotEmpty()) {
-                TopMusicWidget(tracks = uiState.topMusic, isCurrentUser = uiState.isCurrentUser)
-            }
-        }
-
-        // Top 5 Films
-        item {
-            if (uiState.widgetSettings.showTopFilms && uiState.topFilms.isNotEmpty()) {
-                TopFilmsWidget(tracks = uiState.topFilms, isCurrentUser = uiState.isCurrentUser)
-            }
-        }
-
-        // About Me + Heroes
-        item {
-            if (uiState.widgetSettings.showAboutMe) {
-                AboutMeCard(aboutMe = user.aboutMe, heroes = user.heroesSection)
-            }
-        }
-
-        // Interests
-        item {
-            if (uiState.widgetSettings.showInterests && user.interests.isNotEmpty()) {
-                InterestsCard(interests = user.interests)
-            }
-        }
-
-        // Top 8 Friends
-        item {
-            if (uiState.widgetSettings.showTopFriends) {
-                TopFriendsCard(
-                    friends = uiState.topFriends,
-                    onFriendClick = { friend -> onNavigateToProfile(friend.friendId) },
-                    onViewAllClick = onNavigateToFriends
-                )
+        // Widgets rendered in user-defined order
+        val ws = uiState.widgetSettings
+        items(ws.orderedWidgetIds()) { widgetId ->
+            when (widgetId) {
+                "profile_song" -> if (ws.showProfileSong && user.profileSong.isNotEmpty()) {
+                    ProfileSongWidget(song = user.profileSong, artist = user.profileSongArtist)
+                }
+                "photo_gallery" -> if (ws.showPhotoGallery && uiState.photos.isNotEmpty()) {
+                    PhotoGalleryWidget(
+                        photos = uiState.photos,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onPhotoClick = {},
+                        onFrameChange = { _, _ -> }
+                    )
+                }
+                "video_links" -> if (ws.showVideoLinks && uiState.videoLinks.isNotEmpty()) {
+                    VideoLinksWidget(videos = uiState.videoLinks, isCurrentUser = uiState.isCurrentUser)
+                }
+                "top_music" -> if (ws.showTopMusic && uiState.topMusic.isNotEmpty()) {
+                    TopMusicWidget(tracks = uiState.topMusic, isCurrentUser = uiState.isCurrentUser)
+                }
+                "top_films" -> if (ws.showTopFilms && uiState.topFilms.isNotEmpty()) {
+                    TopFilmsWidget(tracks = uiState.topFilms, isCurrentUser = uiState.isCurrentUser)
+                }
+                "about_me" -> if (ws.showAboutMe) {
+                    AboutMeCard(aboutMe = user.aboutMe, heroes = user.heroesSection)
+                }
+                "interests" -> if (ws.showInterests && user.interests.isNotEmpty()) {
+                    InterestsCard(interests = user.interests)
+                }
+                "top_friends" -> if (ws.showTopFriends) {
+                    TopFriendsCard(
+                        friends = uiState.topFriends,
+                        onFriendClick = { friend -> onNavigateToProfile(friend.friendId) },
+                        onViewAllClick = onNavigateToFriends
+                    )
+                }
             }
         }
 

@@ -3,9 +3,13 @@ package com.huabu.app.ui.screens.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,7 +22,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -321,7 +329,7 @@ private fun VideoLinkItem(video: VideoLink) {
                 )
             }
         }
-        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open", tint = HuabuSkyBlue, modifier = Modifier.size(16.dp))
+        Icon(Icons.Filled.Launch, contentDescription = "Open", tint = HuabuSkyBlue, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -414,8 +422,21 @@ private fun MediaTrackList(tracks: List<MediaTrack>, isCurrentUser: Boolean, ico
 }
 
 // ─────────────────────────────────────────────
-// Widget Toggle Settings Panel
+// Widget Toggle + Drag-to-Reorder Settings Panel
 // ─────────────────────────────────────────────
+
+private data class WidgetDef(val id: String, val label: String, val emoji: String)
+
+private val ALL_WIDGETS = listOf(
+    WidgetDef("photo_gallery", "Photo Gallery",  "🖼️"),
+    WidgetDef("video_links",   "Video Links",    "🎬"),
+    WidgetDef("top_music",     "Top 5 Tracks",   "🎵"),
+    WidgetDef("top_films",     "Top 5 Films",    "🎥"),
+    WidgetDef("profile_song",  "Profile Song",   "♪"),
+    WidgetDef("about_me",      "About Me",       "✏️"),
+    WidgetDef("interests",     "Interests",      "⭐"),
+    WidgetDef("top_friends",   "Top Friends",    "👥"),
+)
 
 @Composable
 fun WidgetSettingsPanel(
@@ -423,43 +444,138 @@ fun WidgetSettingsPanel(
     onToggle: ((ProfileWidgetSettings) -> ProfileWidgetSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val orderedIds = remember(settings.widgetOrder) {
+        val saved = settings.orderedWidgetIds()
+        val all = ALL_WIDGETS.map { it.id }
+        val ordered = saved.filter { it in all }
+        val missing = all.filter { it !in ordered }
+        mutableStateListOf<String>().apply { addAll(ordered + missing) }
+    }
+
+    var draggedIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    val itemHeights = remember { mutableStateMapOf<Int, Float>() }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = HuabuCardBg,
         title = {
-            Text("★ Customise My Page ★", color = HuabuGold, fontWeight = FontWeight.ExtraBold)
+            Column {
+                Text("★ Customise My Page ★", color = HuabuGold, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "Toggle on/off  •  Long-press ☰ to reorder",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = HuabuSilver
+                )
+            }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                WidgetToggleRow("Photo Gallery", settings.showPhotoGallery) {
-                    onToggle { it.copy(showPhotoGallery = !it.showPhotoGallery) }
-                }
-                WidgetToggleRow("Video Links", settings.showVideoLinks) {
-                    onToggle { it.copy(showVideoLinks = !it.showVideoLinks) }
-                }
-                WidgetToggleRow("Top 5 Tracks", settings.showTopMusic) {
-                    onToggle { it.copy(showTopMusic = !it.showTopMusic) }
-                }
-                WidgetToggleRow("Top 5 Films", settings.showTopFilms) {
-                    onToggle { it.copy(showTopFilms = !it.showTopFilms) }
-                }
-                WidgetToggleRow("Profile Song", settings.showProfileSong) {
-                    onToggle { it.copy(showProfileSong = !it.showProfileSong) }
-                }
-                WidgetToggleRow("About Me", settings.showAboutMe) {
-                    onToggle { it.copy(showAboutMe = !it.showAboutMe) }
-                }
-                WidgetToggleRow("Interests", settings.showInterests) {
-                    onToggle { it.copy(showInterests = !it.showInterests) }
-                }
-                WidgetToggleRow("Top Friends", settings.showTopFriends) {
-                    onToggle { it.copy(showTopFriends = !it.showTopFriends) }
-                }
-                WidgetToggleRow("Mood Status", settings.showMood) {
-                    onToggle { it.copy(showMood = !it.showMood) }
-                }
-                WidgetToggleRow("Location", settings.showLocation) {
-                    onToggle { it.copy(showLocation = !it.showLocation) }
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                itemsIndexed(orderedIds, key = { _, id -> id }) { index, widgetId ->
+                    val def = ALL_WIDGETS.find { it.id == widgetId } ?: return@itemsIndexed
+                    val enabled = settings.isEnabled(widgetId)
+                    val isDragging = draggedIndex == index
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                itemHeights[index] = coords.size.height.toFloat()
+                            }
+                            .graphicsLayer {
+                                if (isDragging) {
+                                    translationY = dragOffsetY
+                                    shadowElevation = 12f
+                                    scaleX = 1.03f
+                                    scaleY = 1.03f
+                                    alpha = 0.92f
+                                }
+                            }
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (isDragging) HuabuSurface else HuabuCardBg2
+                            )
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Drag handle — long press to start drag
+                        Icon(
+                            imageVector = Icons.Filled.DragHandle,
+                            contentDescription = "Drag to reorder",
+                            tint = if (isDragging) HuabuGold else HuabuSilver,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .pointerInput(index) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            draggedIndex = index
+                                            dragOffsetY = 0f
+                                        },
+                                        onDrag = { _, dragAmount ->
+                                            dragOffsetY += dragAmount.y
+                                            val itemH = itemHeights[index] ?: 60f
+                                            val steps = (dragOffsetY / itemH).toInt()
+                                            if (steps != 0) {
+                                                val newIndex = (index + steps)
+                                                    .coerceIn(0, orderedIds.size - 1)
+                                                if (newIndex != index) {
+                                                    orderedIds.add(newIndex, orderedIds.removeAt(index))
+                                                    draggedIndex = newIndex
+                                                    dragOffsetY -= steps * itemH
+                                                }
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            draggedIndex = null
+                                            dragOffsetY = 0f
+                                            onToggle { it.copy(widgetOrder = orderedIds.joinToString(",")) }
+                                        },
+                                        onDragCancel = {
+                                            draggedIndex = null
+                                            dragOffsetY = 0f
+                                        }
+                                    )
+                                }
+                        )
+
+                        Text(def.emoji, fontSize = 18.sp)
+
+                        Text(
+                            text = def.label,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (enabled) HuabuOnSurface else HuabuSilver
+                        )
+
+                        Switch(
+                            checked = enabled,
+                            onCheckedChange = {
+                                onToggle { s ->
+                                    when (widgetId) {
+                                        "photo_gallery" -> s.copy(showPhotoGallery = !s.showPhotoGallery)
+                                        "video_links"   -> s.copy(showVideoLinks   = !s.showVideoLinks)
+                                        "top_music"     -> s.copy(showTopMusic     = !s.showTopMusic)
+                                        "top_films"     -> s.copy(showTopFilms     = !s.showTopFilms)
+                                        "profile_song"  -> s.copy(showProfileSong  = !s.showProfileSong)
+                                        "about_me"      -> s.copy(showAboutMe      = !s.showAboutMe)
+                                        "interests"     -> s.copy(showInterests    = !s.showInterests)
+                                        "top_friends"   -> s.copy(showTopFriends   = !s.showTopFriends)
+                                        else -> s
+                                    }
+                                }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = HuabuViolet,
+                                uncheckedThumbColor = HuabuSilver,
+                                uncheckedTrackColor = HuabuDivider
+                            )
+                        )
+                    }
                 }
             }
         },
@@ -470,35 +586,6 @@ fun WidgetSettingsPanel(
             ) { Text("Done") }
         }
     )
-}
-
-@Composable
-private fun WidgetToggleRow(label: String, enabled: Boolean, onToggle: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable { onToggle() }
-            .padding(horizontal = 4.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = HuabuOnSurface
-        )
-        Switch(
-            checked = enabled,
-            onCheckedChange = { onToggle() },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = HuabuViolet,
-                uncheckedThumbColor = HuabuSilver,
-                uncheckedTrackColor = HuabuDivider
-            )
-        )
-    }
 }
 
 // ─────────────────────────────────────────────
