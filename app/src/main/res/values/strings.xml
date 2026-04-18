@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Huabu</string>
+    <string name="app_tagline">Your World. Your Page.</string>
+    <string name="feed_title">Huabu</string>
+    <string name="profile_title">Profile</string>
+    <string name="friends_title">Friends</string>
+    <string name="messages_title">Messages</string>
+    <string name="search_title">Discover</string>
+    <string name="compose_title">New Post</string>
+    <string name="about_me_label">About Me</string>
+    <string name="top_friends_label">Top Friends</string>
+    <string name="profile_song_label">Profile Song</string>
+    <string name="interests_label">Interests</string>
+    <string name="heroes_label">Who I\'d Like to Meet</string>
+    <string name="follow">Follow</string>
+    <string name="following">Following</string>
+    <string name="message">Message</string>
+    <string name="edit_profile">Edit Profile</string>
+    <string name="posts_label">Posts</string>
+    <string name="followers_label">Followers</string>
+    <string name="following_label">Following</string>
+</resources>

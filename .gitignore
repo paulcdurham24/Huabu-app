@@ -1,0 +1,32 @@
+# Built outputs
+*.iml
+/build
+app/build
+.gradle
+
+# Local configuration — never commit
+local.properties
+
+# IDE
+/.idea
+.DS_Store
+
+# NDK/CMake generated
+.externalNativeBuild
+.cxx
+
+# Android Studio captures & profiler output
+/captures
+
+# Kotlin / Gradle
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# APK / AAB artifacts
+*.apk
+*.aab
+*.ap_
+
+# Test results
+/test-results

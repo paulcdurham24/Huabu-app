@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Icon-extracted brand colours -->
+    <color name="huabu_violet">#7B3FF2</color>
+    <color name="huabu_coral">#E8614A</color>
+    <color name="huabu_deep_purple">#5C2EBF</color>
+    <color name="huabu_sky_blue">#29B6F6</color>
+    <color name="huabu_lime">#C6F135</color>
+    <color name="huabu_cyan">#00CFFF</color>
+    <color name="huabu_gold">#FFD700</color>
+    <!-- Surfaces -->
+    <color name="huabu_dark_bg">#0E0818</color>
+    <color name="huabu_card_bg">#1C1336</color>
+    <!-- Splash / status bar -->
+    <color name="ic_launcher_background">#7B3FF2</color>
+</resources>

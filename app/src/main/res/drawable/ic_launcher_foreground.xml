@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer star glow -->
+    <path
+        android:fillColor="#33FFD700"
+        android:pathData="M54,18 L58,42 L82,38 L64,56 L76,78 L54,66 L32,78 L44,56 L26,38 L50,42 Z" />
+
+    <!-- Main star -->
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M54,22 L57.5,44 L79,40.5 L63,56 L74,76 L54,64.5 L34,76 L45,56 L29,40.5 L50.5,44 Z" />
+
+    <!-- Center H letter -->
+    <path
+        android:fillColor="#6A0572"
+        android:pathData="M44,44 L44,64 L48,64 L48,56 L60,56 L60,64 L64,64 L64,44 L60,44 L60,52 L48,52 L48,44 Z" />
+
+    <!-- Inner dot accent (circle as path) -->
+    <path
+        android:fillColor="#FF006E"
+        android:pathData="M54,51 a3,3 0 1,0 0.001,0 Z" />
+</vector>
