@@ -3,13 +3,9 @@ package com.huabu.app.ui.screens.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,11 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -452,9 +444,23 @@ fun WidgetSettingsPanel(
         mutableStateListOf<String>().apply { addAll(ordered + missing) }
     }
 
-    var draggedIndex by remember { mutableStateOf<Int?>(null) }
-    var dragOffsetY by remember { mutableStateOf(0f) }
-    val itemHeights = remember { mutableStateMapOf<Int, Float>() }
+    fun saveOrder() {
+        onToggle { it.copy(widgetOrder = orderedIds.joinToString(",")) }
+    }
+
+    fun moveUp(index: Int) {
+        if (index > 0) {
+            orderedIds.add(index - 1, orderedIds.removeAt(index))
+            saveOrder()
+        }
+    }
+
+    fun moveDown(index: Int) {
+        if (index < orderedIds.size - 1) {
+            orderedIds.add(index + 1, orderedIds.removeAt(index))
+            saveOrder()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -463,86 +469,31 @@ fun WidgetSettingsPanel(
             Column {
                 Text("★ Customise My Page ★", color = HuabuGold, fontWeight = FontWeight.ExtraBold)
                 Text(
-                    "Toggle on/off  •  Long-press ☰ to reorder",
+                    "Use ▲ ▼ to reorder  •  toggle switch to show/hide",
                     style = MaterialTheme.typography.labelSmall,
                     color = HuabuSilver
                 )
             }
         },
         text = {
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 420.dp),
+            Column(
+                modifier = Modifier.heightIn(max = 440.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                itemsIndexed(orderedIds, key = { _, id -> id }) { index, widgetId ->
-                    val def = ALL_WIDGETS.find { it.id == widgetId } ?: return@itemsIndexed
+                orderedIds.forEachIndexed { index, widgetId ->
+                    val def = ALL_WIDGETS.find { it.id == widgetId } ?: return@forEachIndexed
                     val enabled = settings.isEnabled(widgetId)
-                    val isDragging = draggedIndex == index
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .onGloballyPositioned { coords ->
-                                itemHeights[index] = coords.size.height.toFloat()
-                            }
-                            .graphicsLayer {
-                                if (isDragging) {
-                                    translationY = dragOffsetY
-                                    shadowElevation = 12f
-                                    scaleX = 1.03f
-                                    scaleY = 1.03f
-                                    alpha = 0.92f
-                                }
-                            }
                             .clip(RoundedCornerShape(10.dp))
-                            .background(
-                                if (isDragging) HuabuSurface else HuabuCardBg2
-                            )
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                            .background(HuabuCardBg2)
+                            .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Drag handle — long press to start drag
-                        Icon(
-                            imageVector = Icons.Filled.DragHandle,
-                            contentDescription = "Drag to reorder",
-                            tint = if (isDragging) HuabuGold else HuabuSilver,
-                            modifier = Modifier
-                                .size(22.dp)
-                                .pointerInput(index) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            draggedIndex = index
-                                            dragOffsetY = 0f
-                                        },
-                                        onDrag = { _, dragAmount ->
-                                            dragOffsetY += dragAmount.y
-                                            val itemH = itemHeights[index] ?: 60f
-                                            val steps = (dragOffsetY / itemH).toInt()
-                                            if (steps != 0) {
-                                                val newIndex = (index + steps)
-                                                    .coerceIn(0, orderedIds.size - 1)
-                                                if (newIndex != index) {
-                                                    orderedIds.add(newIndex, orderedIds.removeAt(index))
-                                                    draggedIndex = newIndex
-                                                    dragOffsetY -= steps * itemH
-                                                }
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            draggedIndex = null
-                                            dragOffsetY = 0f
-                                            onToggle { it.copy(widgetOrder = orderedIds.joinToString(",")) }
-                                        },
-                                        onDragCancel = {
-                                            draggedIndex = null
-                                            dragOffsetY = 0f
-                                        }
-                                    )
-                                }
-                        )
-
-                        Text(def.emoji, fontSize = 18.sp)
+                        Text(def.emoji, fontSize = 16.sp)
 
                         Text(
                             text = def.label,
@@ -550,6 +501,34 @@ fun WidgetSettingsPanel(
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (enabled) HuabuOnSurface else HuabuSilver
                         )
+
+                        // Up / Down arrow buttons
+                        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                            IconButton(
+                                onClick = { moveUp(index) },
+                                modifier = Modifier.size(28.dp),
+                                enabled = index > 0
+                            ) {
+                                Icon(
+                                    Icons.Filled.KeyboardArrowUp,
+                                    contentDescription = "Move up",
+                                    tint = if (index > 0) HuabuGold else HuabuDivider,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { moveDown(index) },
+                                modifier = Modifier.size(28.dp),
+                                enabled = index < orderedIds.size - 1
+                            ) {
+                                Icon(
+                                    Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = "Move down",
+                                    tint = if (index < orderedIds.size - 1) HuabuGold else HuabuDivider,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
 
                         Switch(
                             checked = enabled,
