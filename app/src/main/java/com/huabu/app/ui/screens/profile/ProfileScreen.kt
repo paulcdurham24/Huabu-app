@@ -37,6 +37,7 @@ fun ProfileScreen(
     onNavigateToFriends: () -> Unit,
     onNavigateToMessages: () -> Unit,
     onNavigateToProfile: (String) -> Unit,
+    onNavigateToThemeEditor: (String) -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -80,7 +81,8 @@ fun ProfileScreen(
                 isFollowing = uiState.isFollowing,
                 onFollowClick = { viewModel.toggleFollow() },
                 onMessageClick = onNavigateToMessages,
-                onCustomiseClick = { showWidgetSettings = true }
+                onCustomiseClick = { showWidgetSettings = true },
+                onEditThemeClick = { onNavigateToThemeEditor(userId) }
             )
         }
 
@@ -226,7 +228,8 @@ private fun ProfileInfoCard(
     isFollowing: Boolean,
     onFollowClick: () -> Unit,
     onMessageClick: () -> Unit,
-    onCustomiseClick: () -> Unit = {}
+    onCustomiseClick: () -> Unit = {},
+    onEditThemeClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -372,23 +375,31 @@ private fun ProfileInfoCard(
                     }
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(
                         onClick = {},
                         colors = ButtonDefaults.buttonColors(containerColor = HuabuSurface),
                         shape = RoundedCornerShape(20.dp)
                     ) {
-                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Edit Profile")
+                        Text("Edit", fontSize = 13.sp)
                     }
                     OutlinedButton(
                         onClick = onCustomiseClick,
                         shape = RoundedCornerShape(20.dp)
                     ) {
-                        Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("My Page")
+                        Text("Widgets", fontSize = 13.sp)
+                    }
+                    OutlinedButton(
+                        onClick = onEditThemeClick,
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Theme", fontSize = 13.sp)
                     }
                 }
             }

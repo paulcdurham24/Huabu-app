@@ -48,4 +48,7 @@ object DatabaseModule {
 
     @Provides
     fun provideProfileWidgetSettingsDao(db: HuabuDatabase): ProfileWidgetSettingsDao = db.profileWidgetSettingsDao()
+
+    @Provides
+    fun provideProfileThemeDao(db: HuabuDatabase): ProfileThemeDao = db.profileThemeDao()
 }

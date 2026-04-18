@@ -18,6 +18,7 @@ data class ProfileUiState(
     val topMusic: List<MediaTrack> = emptyList(),
     val topFilms: List<MediaTrack> = emptyList(),
     val widgetSettings: ProfileWidgetSettings = ProfileWidgetSettings(""),
+    val theme: ProfileTheme = ProfileTheme(""),
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
@@ -32,7 +33,8 @@ class ProfileViewModel @Inject constructor(
     private val profilePhotoDao: ProfilePhotoDao,
     private val videoLinkDao: VideoLinkDao,
     private val mediaTrackDao: MediaTrackDao,
-    private val profileWidgetSettingsDao: ProfileWidgetSettingsDao
+    private val profileWidgetSettingsDao: ProfileWidgetSettingsDao,
+    private val profileThemeDao: ProfileThemeDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -80,6 +82,18 @@ class ProfileViewModel @Inject constructor(
                     )
                 }
             }.catch { }.collect()
+        }
+
+        viewModelScope.launch {
+            profileThemeDao.getThemeForUser(resolvedId).collect { theme ->
+                _uiState.update { it.copy(theme = theme ?: ProfileTheme(resolvedId)) }
+            }
+        }
+    }
+
+    fun saveTheme(theme: ProfileTheme) {
+        viewModelScope.launch {
+            profileThemeDao.upsertTheme(theme)
         }
     }
 
