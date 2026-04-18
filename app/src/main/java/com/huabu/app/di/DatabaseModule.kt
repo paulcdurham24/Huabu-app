@@ -36,4 +36,16 @@ object DatabaseModule {
 
     @Provides
     fun provideFriendDao(db: HuabuDatabase): FriendDao = db.friendDao()
+
+    @Provides
+    fun provideProfilePhotoDao(db: HuabuDatabase): ProfilePhotoDao = db.profilePhotoDao()
+
+    @Provides
+    fun provideVideoLinkDao(db: HuabuDatabase): VideoLinkDao = db.videoLinkDao()
+
+    @Provides
+    fun provideMediaTrackDao(db: HuabuDatabase): MediaTrackDao = db.mediaTrackDao()
+
+    @Provides
+    fun provideProfileWidgetSettingsDao(db: HuabuDatabase): ProfileWidgetSettingsDao = db.profileWidgetSettingsDao()
 }

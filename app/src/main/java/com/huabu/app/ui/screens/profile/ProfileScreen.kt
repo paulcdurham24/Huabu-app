@@ -40,9 +40,18 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showWidgetSettings by remember { mutableStateOf(false) }
 
     LaunchedEffect(userId) {
         viewModel.loadProfile(userId)
+    }
+
+    if (showWidgetSettings) {
+        WidgetSettingsPanel(
+            settings = uiState.widgetSettings,
+            onToggle = { viewModel.toggleWidget(it) },
+            onDismiss = { showWidgetSettings = false }
+        )
     }
 
     if (uiState.isLoading) {
@@ -70,34 +79,77 @@ fun ProfileScreen(
                 isCurrentUser = uiState.isCurrentUser,
                 isFollowing = uiState.isFollowing,
                 onFollowClick = { viewModel.toggleFollow() },
-                onMessageClick = onNavigateToMessages
+                onMessageClick = onNavigateToMessages,
+                onCustomiseClick = { showWidgetSettings = true }
             )
         }
 
         // Profile Song Widget
         item {
-            if (user.profileSong.isNotEmpty()) {
+            if (uiState.widgetSettings.showProfileSong && user.profileSong.isNotEmpty()) {
                 ProfileSongWidget(song = user.profileSong, artist = user.profileSongArtist)
             }
         }
 
+        // Photo Gallery
+        item {
+            if (uiState.widgetSettings.showPhotoGallery && uiState.photos.isNotEmpty()) {
+                PhotoGalleryWidget(
+                    photos = uiState.photos,
+                    isCurrentUser = uiState.isCurrentUser,
+                    onPhotoClick = {},
+                    onFrameChange = { _, _ -> }
+                )
+            }
+        }
+
+        // Video Links
+        item {
+            if (uiState.widgetSettings.showVideoLinks && uiState.videoLinks.isNotEmpty()) {
+                VideoLinksWidget(
+                    videos = uiState.videoLinks,
+                    isCurrentUser = uiState.isCurrentUser
+                )
+            }
+        }
+
+        // Top 5 Music
+        item {
+            if (uiState.widgetSettings.showTopMusic && uiState.topMusic.isNotEmpty()) {
+                TopMusicWidget(tracks = uiState.topMusic, isCurrentUser = uiState.isCurrentUser)
+            }
+        }
+
+        // Top 5 Films
+        item {
+            if (uiState.widgetSettings.showTopFilms && uiState.topFilms.isNotEmpty()) {
+                TopFilmsWidget(tracks = uiState.topFilms, isCurrentUser = uiState.isCurrentUser)
+            }
+        }
+
         // About Me + Heroes
-        item { AboutMeCard(aboutMe = user.aboutMe, heroes = user.heroesSection) }
+        item {
+            if (uiState.widgetSettings.showAboutMe) {
+                AboutMeCard(aboutMe = user.aboutMe, heroes = user.heroesSection)
+            }
+        }
 
         // Interests
         item {
-            if (user.interests.isNotEmpty()) {
+            if (uiState.widgetSettings.showInterests && user.interests.isNotEmpty()) {
                 InterestsCard(interests = user.interests)
             }
         }
 
         // Top 8 Friends
         item {
-            TopFriendsCard(
-                friends = uiState.topFriends,
-                onFriendClick = { friend -> onNavigateToProfile(friend.friendId) },
-                onViewAllClick = onNavigateToFriends
-            )
+            if (uiState.widgetSettings.showTopFriends) {
+                TopFriendsCard(
+                    friends = uiState.topFriends,
+                    onFriendClick = { friend -> onNavigateToProfile(friend.friendId) },
+                    onViewAllClick = onNavigateToFriends
+                )
+            }
         }
 
         // Stats Row
@@ -201,7 +253,8 @@ private fun ProfileInfoCard(
     isCurrentUser: Boolean,
     isFollowing: Boolean,
     onFollowClick: () -> Unit,
-    onMessageClick: () -> Unit
+    onMessageClick: () -> Unit,
+    onCustomiseClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -347,14 +400,24 @@ private fun ProfileInfoCard(
                     }
                 }
             } else {
-                Button(
-                    onClick = {},
-                    colors = ButtonDefaults.buttonColors(containerColor = HuabuSurface),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Edit Profile")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {},
+                        colors = ButtonDefaults.buttonColors(containerColor = HuabuSurface),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Edit Profile")
+                    }
+                    OutlinedButton(
+                        onClick = onCustomiseClick,
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("My Page")
+                    }
                 }
             }
         }
