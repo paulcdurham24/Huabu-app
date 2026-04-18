@@ -379,9 +379,8 @@ private fun ProfileInfoCard(
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Button(
+                    OutlinedButton(
                         onClick = onEditProfileClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = HuabuSurface),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
