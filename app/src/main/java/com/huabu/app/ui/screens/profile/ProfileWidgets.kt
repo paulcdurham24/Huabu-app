@@ -442,6 +442,11 @@ private val ALL_WIDGETS = listOf(
     WidgetDef("code_snippets",      "Code Snippets",     "💻"),
     WidgetDef("tech_stack",         "Tech Stack",        "🛠️"),
     WidgetDef("gif_showcase",       "GIF Showcase",      "🎬"),
+    WidgetDef("spotify_now_playing","Spotify Now Playing","🎵"),
+    WidgetDef("meme_wall",          "Meme Wall",         "😂"),
+    WidgetDef("game_stats",         "Game Stats",        "🎮"),
+    WidgetDef("visited_places",     "Visited Places",    "✈️"),
+    WidgetDef("travel_wishlist",    "Travel Wishlist",   "🌎"),
 )
 
 @Composable
@@ -571,6 +576,11 @@ fun WidgetSettingsPanel(
                                         "code_snippets"      -> s.copy(showCodeSnippets     = !s.showCodeSnippets)
                                         "tech_stack"         -> s.copy(showTechStack        = !s.showTechStack)
                                         "gif_showcase"       -> s.copy(showGifShowcase      = !s.showGifShowcase)
+                                        "spotify_now_playing"-> s.copy(showSpotifyNowPlaying= !s.showSpotifyNowPlaying)
+                                        "meme_wall"          -> s.copy(showMemeWall         = !s.showMemeWall)
+                                        "game_stats"         -> s.copy(showGameStats        = !s.showGameStats)
+                                        "visited_places"     -> s.copy(showVisitedPlaces    = !s.showVisitedPlaces)
+                                        "travel_wishlist"    -> s.copy(showTravelWishlist   = !s.showTravelWishlist)
                                         else -> s
                                     }
                                 }

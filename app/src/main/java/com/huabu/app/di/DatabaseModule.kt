@@ -93,4 +93,19 @@ object DatabaseModule {
 
     @Provides
     fun provideGifItemDao(db: HuabuDatabase): GifItemDao = db.gifItemDao()
+
+    @Provides
+    fun provideSpotifyTrackDao(db: HuabuDatabase): SpotifyTrackDao = db.spotifyTrackDao()
+
+    @Provides
+    fun provideMemeItemDao(db: HuabuDatabase): MemeItemDao = db.memeItemDao()
+
+    @Provides
+    fun provideGameStatsDao(db: HuabuDatabase): GameStatsDao = db.gameStatsDao()
+
+    @Provides
+    fun provideVisitedPlaceDao(db: HuabuDatabase): VisitedPlaceDao = db.visitedPlaceDao()
+
+    @Provides
+    fun provideTravelWishDao(db: HuabuDatabase): TravelWishDao = db.travelWishDao()
 }

@@ -237,6 +237,47 @@ fun ProfileScreen(
                         onToggleRepeat = { gif -> viewModel.toggleGifRepeat(gif) }
                     )
                 }
+                "spotify_now_playing" -> if (ws.showSpotifyNowPlaying) {
+                    SpotifyNowPlayingWidget(
+                        track = uiState.spotifyTrack,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onSetTrack = { track -> viewModel.setSpotifyTrack(track) },
+                        onClear = { viewModel.clearSpotifyTrack() }
+                    )
+                }
+                "meme_wall" -> if (ws.showMemeWall) {
+                    MemeWallWidget(
+                        memes = uiState.memes,
+                        isCurrentUser = uiState.isCurrentUser,
+                        userId = uiState.user?.id ?: "",
+                        onAddMeme = { meme -> viewModel.addMeme(meme) },
+                        onDeleteMeme = { meme -> viewModel.deleteMeme(meme) },
+                        onReact = { memeId, reaction -> viewModel.reactToMeme(memeId, reaction) }
+                    )
+                }
+                "game_stats" -> if (ws.showGameStats) {
+                    GameStatsWidget(
+                        stats = uiState.gameStats,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAdd = { stats -> viewModel.addGameStats(stats) }
+                    )
+                }
+                "visited_places" -> if (ws.showVisitedPlaces) {
+                    VisitedPlacesWidget(
+                        places = uiState.visitedPlaces,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAdd = { place -> viewModel.addVisitedPlace(place) },
+                        onDelete = { place -> viewModel.deleteVisitedPlace(place) }
+                    )
+                }
+                "travel_wishlist" -> if (ws.showTravelWishlist) {
+                    TravelWishlistWidget(
+                        wishes = uiState.travelWishes,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAdd = { wish -> viewModel.addTravelWish(wish) },
+                        onDelete = { wish -> viewModel.deleteTravelWish(wish) }
+                    )
+                }
             }
         }
 

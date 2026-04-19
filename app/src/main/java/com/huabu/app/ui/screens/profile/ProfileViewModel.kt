@@ -33,6 +33,11 @@ data class ProfileUiState(
     val codeSnippets: List<CodeSnippet> = emptyList(),
     val techStack: List<TechStackItem> = emptyList(),
     val gifs: List<GifItem> = emptyList(),
+    val spotifyTrack: SpotifyTrack? = null,
+    val memes: List<MemeItem> = emptyList(),
+    val gameStats: List<GameStats> = emptyList(),
+    val visitedPlaces: List<VisitedPlace> = emptyList(),
+    val travelWishes: List<TravelWish> = emptyList(),
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
@@ -62,7 +67,12 @@ class ProfileViewModel @Inject constructor(
     private val profilePollDao: ProfilePollDao,
     private val codeSnippetDao: CodeSnippetDao,
     private val techStackDao: TechStackDao,
-    private val gifItemDao: GifItemDao
+    private val gifItemDao: GifItemDao,
+    private val spotifyTrackDao: SpotifyTrackDao,
+    private val memeItemDao: MemeItemDao,
+    private val gameStatsDao: GameStatsDao,
+    private val visitedPlaceDao: VisitedPlaceDao,
+    private val travelWishDao: TravelWishDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -198,6 +208,36 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             gifItemDao.getGifsForUser(resolvedId).collect { gifs ->
                 _uiState.update { it.copy(gifs = gifs) }
+            }
+        }
+
+        viewModelScope.launch {
+            spotifyTrackDao.getCurrentTrack(resolvedId).collect { track ->
+                _uiState.update { it.copy(spotifyTrack = track) }
+            }
+        }
+
+        viewModelScope.launch {
+            memeItemDao.getMemesForUser(resolvedId).collect { memes ->
+                _uiState.update { it.copy(memes = memes) }
+            }
+        }
+
+        viewModelScope.launch {
+            gameStatsDao.getAllGameStats(resolvedId).collect { stats ->
+                _uiState.update { it.copy(gameStats = stats) }
+            }
+        }
+
+        viewModelScope.launch {
+            visitedPlaceDao.getVisitedPlaces(resolvedId).collect { places ->
+                _uiState.update { it.copy(visitedPlaces = places) }
+            }
+        }
+
+        viewModelScope.launch {
+            travelWishDao.getTravelWishes(resolvedId).collect { wishes ->
+                _uiState.update { it.copy(travelWishes = wishes) }
             }
         }
 
@@ -494,6 +534,67 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             gifItemDao.upsertGif(gif.copy(repeat = !gif.repeat))
         }
+    }
+
+    fun setSpotifyTrack(track: SpotifyTrack) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = track.copy(userId = userId)
+        viewModelScope.launch { spotifyTrackDao.upsertTrack(withUser) }
+    }
+
+    fun clearSpotifyTrack() {
+        val userId = _uiState.value.user?.id ?: return
+        _uiState.update { it.copy(spotifyTrack = null) }
+        viewModelScope.launch { spotifyTrackDao.deleteTrack("spotify_$userId") }
+    }
+
+    fun addMeme(meme: MemeItem) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = meme.copy(userId = userId, sortOrder = _uiState.value.memes.size)
+        viewModelScope.launch { memeItemDao.upsertMeme(withUser) }
+    }
+
+    fun deleteMeme(meme: MemeItem) {
+        viewModelScope.launch { memeItemDao.deleteMeme(meme.id) }
+    }
+
+    fun reactToMeme(memeId: String, reaction: String) {
+        val userId = _uiState.value.user?.id ?: return
+        viewModelScope.launch {
+            memeItemDao.recordReaction(MemeReaction(memeId, userId, reaction))
+            when (reaction) {
+                "like" -> memeItemDao.likeMeme(memeId)
+                "fire" -> memeItemDao.fireMeme(memeId)
+                "laugh" -> memeItemDao.laughMeme(memeId)
+                "mindblown" -> memeItemDao.mindblownMeme(memeId)
+            }
+        }
+    }
+
+    fun addGameStats(stats: GameStats) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = stats.copy(userId = userId)
+        viewModelScope.launch { gameStatsDao.upsertStats(withUser) }
+    }
+
+    fun addVisitedPlace(place: VisitedPlace) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = place.copy(userId = userId)
+        viewModelScope.launch { visitedPlaceDao.upsertPlace(withUser) }
+    }
+
+    fun deleteVisitedPlace(place: VisitedPlace) {
+        viewModelScope.launch { visitedPlaceDao.deletePlace(place.id) }
+    }
+
+    fun addTravelWish(wish: TravelWish) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = wish.copy(userId = userId, sortOrder = _uiState.value.travelWishes.size)
+        viewModelScope.launch { travelWishDao.upsertWish(withUser) }
+    }
+
+    fun deleteTravelWish(wish: TravelWish) {
+        viewModelScope.launch { travelWishDao.deleteWish(wish.id) }
     }
 
     private fun getMockSnippets(userId: String): List<CodeSnippet> = listOf(

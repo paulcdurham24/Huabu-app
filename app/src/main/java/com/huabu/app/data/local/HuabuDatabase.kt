@@ -30,9 +30,16 @@ import com.huabu.app.data.model.*
         PollVote::class,
         CodeSnippet::class,
         TechStackItem::class,
-        GifItem::class
+        GifItem::class,
+        SpotifyTrack::class,
+        MemeItem::class,
+        MemeReaction::class,
+        GameStats::class,
+        DailyScore::class,
+        VisitedPlace::class,
+        TravelWish::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {
@@ -59,4 +66,9 @@ abstract class HuabuDatabase : RoomDatabase() {
     abstract fun codeSnippetDao(): CodeSnippetDao
     abstract fun techStackDao(): TechStackDao
     abstract fun gifItemDao(): GifItemDao
+    abstract fun spotifyTrackDao(): SpotifyTrackDao
+    abstract fun memeItemDao(): MemeItemDao
+    abstract fun gameStatsDao(): GameStatsDao
+    abstract fun visitedPlaceDao(): VisitedPlaceDao
+    abstract fun travelWishDao(): TravelWishDao
 }

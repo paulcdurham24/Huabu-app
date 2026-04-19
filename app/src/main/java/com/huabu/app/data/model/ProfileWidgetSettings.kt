@@ -3,7 +3,7 @@ package com.huabu.app.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-const val DEFAULT_WIDGET_ORDER = "go_live,events,badges,pinned_posts,mood_board,nft_showcase,polls,code_snippets,tech_stack,gif_showcase,recently_played,my_playlist,currently_reading,currently_watching,photo_gallery,video_links,top_music,top_films,profile_song,about_me,interests,top_friends"
+const val DEFAULT_WIDGET_ORDER = "go_live,events,badges,pinned_posts,mood_board,nft_showcase,polls,code_snippets,tech_stack,gif_showcase,spotify_now_playing,meme_wall,game_stats,visited_places,travel_wishlist,recently_played,my_playlist,currently_reading,currently_watching,photo_gallery,video_links,top_music,top_films,profile_song,about_me,interests,top_friends"
 
 @Entity(tableName = "profile_widget_settings")
 data class ProfileWidgetSettings(
@@ -30,6 +30,11 @@ data class ProfileWidgetSettings(
     val showCodeSnippets: Boolean = true,
     val showTechStack: Boolean = true,
     val showGifShowcase: Boolean = true,
+    val showSpotifyNowPlaying: Boolean = true,
+    val showMemeWall: Boolean = true,
+    val showGameStats: Boolean = true,
+    val showVisitedPlaces: Boolean = true,
+    val showTravelWishlist: Boolean = true,
     val showMood: Boolean = true,
     val showLocation: Boolean = true,
     val widgetOrder: String = DEFAULT_WIDGET_ORDER
@@ -60,6 +65,11 @@ data class ProfileWidgetSettings(
         "code_snippets"      -> showCodeSnippets
         "tech_stack"         -> showTechStack
         "gif_showcase"       -> showGifShowcase
+        "spotify_now_playing"-> showSpotifyNowPlaying
+        "meme_wall"          -> showMemeWall
+        "game_stats"         -> showGameStats
+        "visited_places"     -> showVisitedPlaces
+        "travel_wishlist"    -> showTravelWishlist
         else                 -> true
     }
 }
