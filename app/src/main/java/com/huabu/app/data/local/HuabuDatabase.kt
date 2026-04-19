@@ -15,9 +15,11 @@ import com.huabu.app.data.model.*
         VideoLink::class,
         MediaTrack::class,
         ProfileWidgetSettings::class,
-        ProfileTheme::class
+        ProfileTheme::class,
+        LiveStream::class,
+        ProfileEvent::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {
@@ -30,4 +32,6 @@ abstract class HuabuDatabase : RoomDatabase() {
     abstract fun mediaTrackDao(): MediaTrackDao
     abstract fun profileWidgetSettingsDao(): ProfileWidgetSettingsDao
     abstract fun profileThemeDao(): ProfileThemeDao
+    abstract fun liveStreamDao(): LiveStreamDao
+    abstract fun profileEventDao(): ProfileEventDao
 }

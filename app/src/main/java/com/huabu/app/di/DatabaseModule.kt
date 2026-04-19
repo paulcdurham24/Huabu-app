@@ -51,4 +51,10 @@ object DatabaseModule {
 
     @Provides
     fun provideProfileThemeDao(db: HuabuDatabase): ProfileThemeDao = db.profileThemeDao()
+
+    @Provides
+    fun provideLiveStreamDao(db: HuabuDatabase): LiveStreamDao = db.liveStreamDao()
+
+    @Provides
+    fun provideProfileEventDao(db: HuabuDatabase): ProfileEventDao = db.profileEventDao()
 }

@@ -125,6 +125,23 @@ fun ProfileScreen(
                         onViewAllClick = onNavigateToFriends
                     )
                 }
+                "go_live" -> if (ws.showGoLive) {
+                    GoLiveWidget(
+                        liveStream = uiState.liveStream,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onGoLive = { title -> viewModel.goLive(title) },
+                        onEndLive = { viewModel.endLive() }
+                    )
+                }
+                "events" -> if (ws.showEvents) {
+                    EventsWidget(
+                        events = uiState.events,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAddEvent = { event -> viewModel.addEvent(event) },
+                        onDeleteEvent = { event -> viewModel.deleteEvent(event) },
+                        onRsvp = { event -> viewModel.rsvpEvent(event) }
+                    )
+                }
             }
         }
 

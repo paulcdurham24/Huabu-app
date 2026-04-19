@@ -428,6 +428,8 @@ private val ALL_WIDGETS = listOf(
     WidgetDef("about_me",      "About Me",       "✏️"),
     WidgetDef("interests",     "Interests",      "⭐"),
     WidgetDef("top_friends",   "Top Friends",    "👥"),
+    WidgetDef("go_live",        "Go Live",        "🔴"),
+    WidgetDef("events",         "Events",         "📅"),
 )
 
 @Composable
@@ -543,6 +545,8 @@ fun WidgetSettingsPanel(
                                         "about_me"      -> s.copy(showAboutMe      = !s.showAboutMe)
                                         "interests"     -> s.copy(showInterests    = !s.showInterests)
                                         "top_friends"   -> s.copy(showTopFriends   = !s.showTopFriends)
+                                        "go_live"       -> s.copy(showGoLive       = !s.showGoLive)
+                                        "events"        -> s.copy(showEvents        = !s.showEvents)
                                         else -> s
                                     }
                                 }

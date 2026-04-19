@@ -19,6 +19,8 @@ data class ProfileUiState(
     val topFilms: List<MediaTrack> = emptyList(),
     val widgetSettings: ProfileWidgetSettings = ProfileWidgetSettings(""),
     val theme: ProfileTheme = ProfileTheme(""),
+    val liveStream: LiveStream = LiveStream(""),
+    val events: List<ProfileEvent> = emptyList(),
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
@@ -34,7 +36,9 @@ class ProfileViewModel @Inject constructor(
     private val videoLinkDao: VideoLinkDao,
     private val mediaTrackDao: MediaTrackDao,
     private val profileWidgetSettingsDao: ProfileWidgetSettingsDao,
-    private val profileThemeDao: ProfileThemeDao
+    private val profileThemeDao: ProfileThemeDao,
+    private val liveStreamDao: LiveStreamDao,
+    private val profileEventDao: ProfileEventDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -89,6 +93,51 @@ class ProfileViewModel @Inject constructor(
                 _uiState.update { it.copy(theme = theme ?: ProfileTheme(resolvedId)) }
             }
         }
+
+        viewModelScope.launch {
+            liveStreamDao.getLiveStreamForUser(resolvedId).collect { stream ->
+                _uiState.update { it.copy(liveStream = stream ?: LiveStream(resolvedId)) }
+            }
+        }
+
+        viewModelScope.launch {
+            profileEventDao.getEventsForUser(resolvedId).collect { events ->
+                _uiState.update { it.copy(events = events) }
+            }
+        }
+    }
+
+    fun goLive(title: String) {
+        val userId = _uiState.value.liveStream.userId.ifEmpty {
+            _uiState.value.user?.id ?: return
+        }
+        val stream = LiveStream(userId = userId, isLive = true, title = title, viewerCount = 0, startedAt = System.currentTimeMillis())
+        _uiState.update { it.copy(liveStream = stream) }
+        viewModelScope.launch { liveStreamDao.upsertLiveStream(stream) }
+    }
+
+    fun endLive() {
+        val stream = _uiState.value.liveStream.copy(isLive = false, viewerCount = 0)
+        _uiState.update { it.copy(liveStream = stream) }
+        viewModelScope.launch { liveStreamDao.upsertLiveStream(stream) }
+    }
+
+    fun addEvent(event: ProfileEvent) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = event.copy(userId = userId)
+        viewModelScope.launch { profileEventDao.upsertEvent(withUser) }
+    }
+
+    fun deleteEvent(event: ProfileEvent) {
+        viewModelScope.launch { profileEventDao.deleteEvent(event) }
+    }
+
+    fun rsvpEvent(event: ProfileEvent) {
+        val updated = event.copy(
+            hasRsvped = !event.hasRsvped,
+            rsvpCount = if (event.hasRsvped) (event.rsvpCount - 1).coerceAtLeast(0) else event.rsvpCount + 1
+        )
+        viewModelScope.launch { profileEventDao.upsertEvent(updated) }
     }
 
     fun saveTheme(theme: ProfileTheme) {
