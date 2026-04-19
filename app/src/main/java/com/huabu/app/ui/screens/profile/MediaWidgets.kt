@@ -708,12 +708,20 @@ private fun WatchEditor(
 
                 // Type selector
                 Text("Type", color = HuabuSilver, style = MaterialTheme.typography.labelMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     WatchType.entries.forEach { t ->
+                        val label = when(t) {
+                            WatchType.DOCUMENTARY -> "DOC"
+                            else -> t.name
+                        }
                         FilterChip(
                             selected = type == t,
                             onClick = { type = t },
-                            label = { Text(t.name, fontSize = 11.sp) },
+                            label = { Text(label, fontSize = 10.sp, maxLines = 1) },
+                            modifier = Modifier.weight(1f),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = HuabuHotPink.copy(0.25f),
                                 selectedLabelColor = HuabuHotPink
@@ -723,30 +731,36 @@ private fun WatchEditor(
                 }
 
                 if (type == WatchType.SERIES || type == WatchType.ANIME) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         OutlinedTextField(
                             value = season, onValueChange = { season = it.filter { c -> c.isDigit() } },
-                            label = { Text("Season", color = HuabuSilver) },
+                            label = { Text("Season", color = HuabuSilver, fontSize = 11.sp) },
                             singleLine = true,
                             colors = outlinedFieldColors(HuabuHotPink),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp)
                         )
                         OutlinedTextField(
                             value = episode, onValueChange = { episode = it.filter { c -> c.isDigit() } },
-                            label = { Text("Episode", color = HuabuSilver) },
+                            label = { Text("Episode", color = HuabuSilver, fontSize = 11.sp) },
                             singleLine = true,
                             colors = outlinedFieldColors(HuabuHotPink),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp)
                         )
                         OutlinedTextField(
                             value = total, onValueChange = { total = it.filter { c -> c.isDigit() } },
-                            label = { Text("Total eps", color = HuabuSilver) },
+                            label = { Text("Total eps", color = HuabuSilver, fontSize = 11.sp) },
                             singleLine = true,
                             colors = outlinedFieldColors(HuabuHotPink),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp)
                         )
                     }
                 }
