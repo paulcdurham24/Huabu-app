@@ -3,7 +3,7 @@ package com.huabu.app.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-const val DEFAULT_WIDGET_ORDER = "go_live,events,badges,pinned_posts,mood_board,photo_gallery,video_links,top_music,top_films,profile_song,about_me,interests,top_friends"
+const val DEFAULT_WIDGET_ORDER = "go_live,events,badges,pinned_posts,mood_board,recently_played,my_playlist,currently_reading,currently_watching,photo_gallery,video_links,top_music,top_films,profile_song,about_me,interests,top_friends"
 
 @Entity(tableName = "profile_widget_settings")
 data class ProfileWidgetSettings(
@@ -21,6 +21,10 @@ data class ProfileWidgetSettings(
     val showBadges: Boolean = true,
     val showMoodBoard: Boolean = true,
     val showPinnedPosts: Boolean = true,
+    val showRecentlyPlayed: Boolean = true,
+    val showMyPlaylist: Boolean = true,
+    val showCurrentlyReading: Boolean = true,
+    val showCurrentlyWatching: Boolean = true,
     val showMood: Boolean = true,
     val showLocation: Boolean = true,
     val widgetOrder: String = DEFAULT_WIDGET_ORDER
@@ -41,7 +45,11 @@ data class ProfileWidgetSettings(
         "events"        -> showEvents
         "badges"        -> showBadges
         "mood_board"    -> showMoodBoard
-        "pinned_posts"  -> showPinnedPosts
-        else            -> true
+        "pinned_posts"       -> showPinnedPosts
+        "recently_played"    -> showRecentlyPlayed
+        "my_playlist"        -> showMyPlaylist
+        "currently_reading"  -> showCurrentlyReading
+        "currently_watching" -> showCurrentlyWatching
+        else                 -> true
     }
 }

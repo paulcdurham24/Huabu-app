@@ -24,6 +24,10 @@ data class ProfileUiState(
     val badges: List<Badge> = emptyList(),
     val moodBoard: List<MoodBoardItem> = emptyList(),
     val pinnedPosts: List<Post> = emptyList(),
+    val recentTracks: List<RecentTrack> = emptyList(),
+    val playlist: List<PlaylistItem> = emptyList(),
+    val currentlyReading: CurrentlyReading? = null,
+    val currentlyWatching: CurrentlyWatching? = null,
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
@@ -44,7 +48,11 @@ class ProfileViewModel @Inject constructor(
     private val profileEventDao: ProfileEventDao,
     private val badgeDao: BadgeDao,
     private val moodBoardDao: MoodBoardDao,
-    private val pinnedPostDao: PinnedPostDao
+    private val pinnedPostDao: PinnedPostDao,
+    private val recentTrackDao: RecentTrackDao,
+    private val playlistItemDao: PlaylistItemDao,
+    private val currentlyReadingDao: CurrentlyReadingDao,
+    private val currentlyWatchingDao: CurrentlyWatchingDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -122,6 +130,31 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             moodBoardDao.getMoodBoardForUser(resolvedId).collect { items ->
                 _uiState.update { it.copy(moodBoard = items) }
+            }
+        }
+
+        viewModelScope.launch {
+            recentTrackDao.getRecentTracks(resolvedId).collect { tracks ->
+                val shown = if (tracks.isEmpty()) getMockRecentTracks(resolvedId) else tracks
+                _uiState.update { it.copy(recentTracks = shown) }
+            }
+        }
+
+        viewModelScope.launch {
+            playlistItemDao.getPlaylist(resolvedId).collect { items ->
+                _uiState.update { it.copy(playlist = items) }
+            }
+        }
+
+        viewModelScope.launch {
+            currentlyReadingDao.getForUser(resolvedId).collect { book ->
+                _uiState.update { it.copy(currentlyReading = book) }
+            }
+        }
+
+        viewModelScope.launch {
+            currentlyWatchingDao.getForUser(resolvedId).collect { show ->
+                _uiState.update { it.copy(currentlyWatching = show) }
             }
         }
 
@@ -313,6 +346,50 @@ class ProfileViewModel @Inject constructor(
         MediaTrack("fi3", userId, MediaTrackType.FILM, "Everything Everywhere All at Once", "Daniels", "", "2022", 3),
         MediaTrack("fi4", userId, MediaTrackType.FILM, "Parasite", "Bong Joon-ho", "", "2019", 4),
         MediaTrack("fi5", userId, MediaTrackType.FILM, "Dune", "Denis Villeneuve", "", "2021", 5)
+    )
+
+    fun addPlaylistItem(item: PlaylistItem) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = item.copy(userId = userId, sortOrder = _uiState.value.playlist.size)
+        viewModelScope.launch { playlistItemDao.upsertItem(withUser) }
+    }
+
+    fun deletePlaylistItem(item: PlaylistItem) {
+        viewModelScope.launch { playlistItemDao.deleteItem(item.id) }
+    }
+
+    fun saveCurrentlyReading(book: CurrentlyReading) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = book.copy(userId = userId)
+        _uiState.update { it.copy(currentlyReading = withUser) }
+        viewModelScope.launch { currentlyReadingDao.upsert(withUser) }
+    }
+
+    fun clearCurrentlyReading() {
+        val userId = _uiState.value.user?.id ?: return
+        _uiState.update { it.copy(currentlyReading = null) }
+        viewModelScope.launch { currentlyReadingDao.delete(userId) }
+    }
+
+    fun saveCurrentlyWatching(show: CurrentlyWatching) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = show.copy(userId = userId)
+        _uiState.update { it.copy(currentlyWatching = withUser) }
+        viewModelScope.launch { currentlyWatchingDao.upsert(withUser) }
+    }
+
+    fun clearCurrentlyWatching() {
+        val userId = _uiState.value.user?.id ?: return
+        _uiState.update { it.copy(currentlyWatching = null) }
+        viewModelScope.launch { currentlyWatchingDao.delete(userId) }
+    }
+
+    private fun getMockRecentTracks(userId: String): List<RecentTrack> = listOf(
+        RecentTrack("rt1", userId, "Blinding Lights",      "The Weeknd",      "#8B0000", System.currentTimeMillis() - 600_000),
+        RecentTrack("rt2", userId, "Levitating",           "Dua Lipa",        "#8B5CF6", System.currentTimeMillis() - 3_600_000),
+        RecentTrack("rt3", userId, "Stay",                 "The Kid LAROI",   "#06B6D4", System.currentTimeMillis() - 7_200_000),
+        RecentTrack("rt4", userId, "Heat Waves",           "Glass Animals",   "#F97316", System.currentTimeMillis() - 14_400_000),
+        RecentTrack("rt5", userId, "As It Was",            "Harry Styles",    "#EC4899", System.currentTimeMillis() - 86_400_000),
     )
 
     private fun getMockBadges(userId: String): List<Badge> = listOf(

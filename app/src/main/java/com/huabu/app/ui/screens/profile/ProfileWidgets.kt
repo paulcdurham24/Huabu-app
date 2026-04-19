@@ -432,7 +432,11 @@ private val ALL_WIDGETS = listOf(
     WidgetDef("events",         "Events",         "📅"),
     WidgetDef("badges",         "Badges",         "🏆"),
     WidgetDef("mood_board",     "Mood Board",     "🎨"),
-    WidgetDef("pinned_posts",   "Pinned Posts",   "📌"),
+    WidgetDef("pinned_posts",       "Pinned Posts",      "📌"),
+    WidgetDef("recently_played",    "Recently Played",   "🎧"),
+    WidgetDef("my_playlist",        "My Playlist",       "🎶"),
+    WidgetDef("currently_reading",  "Currently Reading", "📖"),
+    WidgetDef("currently_watching", "Currently Watching","🎬"),
 )
 
 @Composable
@@ -552,7 +556,11 @@ fun WidgetSettingsPanel(
                                         "events"        -> s.copy(showEvents        = !s.showEvents)
                                         "badges"        -> s.copy(showBadges        = !s.showBadges)
                                         "mood_board"    -> s.copy(showMoodBoard     = !s.showMoodBoard)
-                                        "pinned_posts"  -> s.copy(showPinnedPosts   = !s.showPinnedPosts)
+                                        "pinned_posts"       -> s.copy(showPinnedPosts        = !s.showPinnedPosts)
+                                        "recently_played"    -> s.copy(showRecentlyPlayed    = !s.showRecentlyPlayed)
+                                        "my_playlist"        -> s.copy(showMyPlaylist        = !s.showMyPlaylist)
+                                        "currently_reading"  -> s.copy(showCurrentlyReading  = !s.showCurrentlyReading)
+                                        "currently_watching" -> s.copy(showCurrentlyWatching = !s.showCurrentlyWatching)
                                         else -> s
                                     }
                                 }

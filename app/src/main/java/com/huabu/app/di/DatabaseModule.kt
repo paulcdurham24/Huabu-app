@@ -66,4 +66,16 @@ object DatabaseModule {
 
     @Provides
     fun providePinnedPostDao(db: HuabuDatabase): PinnedPostDao = db.pinnedPostDao()
+
+    @Provides
+    fun provideRecentTrackDao(db: HuabuDatabase): RecentTrackDao = db.recentTrackDao()
+
+    @Provides
+    fun providePlaylistItemDao(db: HuabuDatabase): PlaylistItemDao = db.playlistItemDao()
+
+    @Provides
+    fun provideCurrentlyReadingDao(db: HuabuDatabase): CurrentlyReadingDao = db.currentlyReadingDao()
+
+    @Provides
+    fun provideCurrentlyWatchingDao(db: HuabuDatabase): CurrentlyWatchingDao = db.currentlyWatchingDao()
 }

@@ -20,9 +20,13 @@ import com.huabu.app.data.model.*
         ProfileEvent::class,
         Badge::class,
         MoodBoardItem::class,
-        PinnedPost::class
+        PinnedPost::class,
+        RecentTrack::class,
+        PlaylistItem::class,
+        CurrentlyReading::class,
+        CurrentlyWatching::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {
@@ -40,4 +44,8 @@ abstract class HuabuDatabase : RoomDatabase() {
     abstract fun badgeDao(): BadgeDao
     abstract fun moodBoardDao(): MoodBoardDao
     abstract fun pinnedPostDao(): PinnedPostDao
+    abstract fun recentTrackDao(): RecentTrackDao
+    abstract fun playlistItemDao(): PlaylistItemDao
+    abstract fun currentlyReadingDao(): CurrentlyReadingDao
+    abstract fun currentlyWatchingDao(): CurrentlyWatchingDao
 }

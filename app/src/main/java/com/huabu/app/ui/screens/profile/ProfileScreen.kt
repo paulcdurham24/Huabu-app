@@ -164,6 +164,36 @@ fun ProfileScreen(
                         onUnpin = { post -> viewModel.unpinPost(post) }
                     )
                 }
+                "recently_played" -> if (ws.showRecentlyPlayed && uiState.recentTracks.isNotEmpty()) {
+                    RecentlyPlayedWidget(
+                        tracks = uiState.recentTracks,
+                        isCurrentUser = uiState.isCurrentUser
+                    )
+                }
+                "my_playlist" -> if (ws.showMyPlaylist) {
+                    MyPlaylistWidget(
+                        items = uiState.playlist,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAdd = { item -> viewModel.addPlaylistItem(item) },
+                        onDelete = { item -> viewModel.deletePlaylistItem(item) }
+                    )
+                }
+                "currently_reading" -> if (ws.showCurrentlyReading) {
+                    CurrentlyReadingWidget(
+                        book = uiState.currentlyReading,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onSave = { book -> viewModel.saveCurrentlyReading(book) },
+                        onClear = { viewModel.clearCurrentlyReading() }
+                    )
+                }
+                "currently_watching" -> if (ws.showCurrentlyWatching) {
+                    CurrentlyWatchingWidget(
+                        show = uiState.currentlyWatching,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onSave = { show -> viewModel.saveCurrentlyWatching(show) },
+                        onClear = { viewModel.clearCurrentlyWatching() }
+                    )
+                }
             }
         }
 
