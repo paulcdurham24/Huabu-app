@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "123456789",
-    "project_id": "huabu-app-demo",
-    "storage_bucket": "huabu-app-demo.appspot.com"
+    "project_number": "213223803621",
+    "project_id": "huabu-app",
+    "storage_bucket": "huabu-app.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789:android:abcdef123456",
+        "mobilesdk_app_id": "1:213223803621:android:5ac9561d33cc9c6986e20c",
         "android_client_info": {
           "package_name": "com.huabu.app.debug"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "DEMO_KEY_REPLACE_WITH_REAL"
+          "current_key": "AIzaSyAZdW_nbJWNYAGoQeiDTGS9DjzUQ45bvms"
         }
       ],
       "services": {
