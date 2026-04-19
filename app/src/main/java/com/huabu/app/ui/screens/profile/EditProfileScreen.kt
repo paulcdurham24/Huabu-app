@@ -1,5 +1,6 @@
 package com.huabu.app.ui.screens.profile
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -22,7 +23,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.huabu.app.data.model.User
+import com.huabu.app.ui.components.ProfileImagePicker
 import com.huabu.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,8 +33,11 @@ import com.huabu.app.ui.theme.*
 fun EditProfileScreen(
     user: User,
     onSave: (User) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: EditProfileViewModel = hiltViewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+
     var displayName     by remember { mutableStateOf(user.displayName) }
     var username        by remember { mutableStateOf(user.username) }
     var bio             by remember { mutableStateOf(user.bio) }
@@ -46,6 +52,24 @@ fun EditProfileScreen(
 
     var nameError by remember { mutableStateOf(false) }
 
+    // Track avatar URL from ViewModel updates
+    var currentAvatarUrl by remember { mutableStateOf(user.profileImageUrl) }
+
+    // Update avatar URL when ViewModel updates
+    LaunchedEffect(uiState.user) {
+        uiState.user?.let {
+            currentAvatarUrl = it.profileImageUrl
+        }
+    }
+
+    // Handle save success
+    LaunchedEffect(uiState.saveSuccess) {
+        if (uiState.saveSuccess) {
+            viewModel.onSaveComplete()
+            onSave(uiState.user ?: user)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -59,28 +83,38 @@ fun EditProfileScreen(
                     Button(
                         onClick = {
                             if (displayName.isBlank()) { nameError = true; return@Button }
-                            onSave(
-                                user.copy(
-                                    displayName       = displayName.trim(),
-                                    username          = username.trim().lowercase().replace(" ", "_"),
-                                    bio               = bio.trim(),
-                                    location          = location.trim(),
-                                    website           = website.trim(),
-                                    mood              = mood.trim(),
-                                    aboutMe           = aboutMe.trim(),
-                                    heroesSection     = heroesSection.trim(),
-                                    interests         = interests.trim(),
-                                    profileSong       = profileSong.trim(),
-                                    profileSongArtist = profileSongArtist.trim()
+                            viewModel.saveProfile(
+                                user.id,
+                                mapOf(
+                                    "displayName" to displayName.trim(),
+                                    "username" to username.trim().lowercase().replace(" ", "_"),
+                                    "bio" to bio.trim(),
+                                    "location" to location.trim(),
+                                    "website" to website.trim(),
+                                    "mood" to mood.trim(),
+                                    "aboutMe" to aboutMe.trim(),
+                                    "heroesSection" to heroesSection.trim(),
+                                    "interests" to interests.trim(),
+                                    "profileSong" to profileSong.trim(),
+                                    "profileSongArtist" to profileSongArtist.trim()
                                 )
                             )
                         },
+                        enabled = !uiState.isSaving,
                         colors = ButtonDefaults.buttonColors(containerColor = HuabuViolet),
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
-                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Save")
+                        if (uiState.isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Save")
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = HuabuDarkBg)
@@ -95,42 +129,30 @@ fun EditProfileScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Avatar placeholder (photo upload not yet wired to storage)
+            // Avatar with Firebase Storage upload
             item {
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.BottomEnd) {
-                        Box(
-                            modifier = Modifier
-                                .size(96.dp)
-                                .clip(CircleShape)
-                                .border(
-                                    3.dp,
-                                    Brush.sweepGradient(listOf(HuabuHotPink, HuabuGold, HuabuAccentCyan, HuabuHotPink)),
-                                    CircleShape
-                                )
-                                .background(Brush.radialGradient(listOf(HuabuDeepPurple, HuabuCardBg))),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = displayName.firstOrNull()?.uppercase() ?: "?",
-                                fontSize = 36.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = HuabuGold
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(HuabuViolet),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.CameraAlt, contentDescription = "Change photo", tint = Color.White, modifier = Modifier.size(16.dp))
-                        }
-                    }
+                    ProfileImagePicker(
+                        currentImageUrl = currentAvatarUrl.takeIf { it.isNotEmpty() },
+                        onImageSelected = { uri ->
+                            viewModel.updateAvatar(user.id, uri)
+                        },
+                        size = 120
+                    )
+                }
+
+                // Upload progress indicator
+                if (uiState.avatarUploadProgress in 0.01f..0.99f) {
+                    LinearProgressIndicator(
+                        progress = { uiState.avatarUploadProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 64.dp),
+                        color = HuabuHotPink
+                    )
                 }
             }
 
