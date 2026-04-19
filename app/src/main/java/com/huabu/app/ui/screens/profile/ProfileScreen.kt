@@ -142,6 +142,28 @@ fun ProfileScreen(
                         onRsvp = { event -> viewModel.rsvpEvent(event) }
                     )
                 }
+                "badges" -> if (ws.showBadges && uiState.badges.isNotEmpty()) {
+                    BadgesWidget(
+                        badges = uiState.badges,
+                        isCurrentUser = uiState.isCurrentUser
+                    )
+                }
+                "mood_board" -> if (ws.showMoodBoard) {
+                    MoodBoardWidget(
+                        items = uiState.moodBoard,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onUpdateCell = { item -> viewModel.updateMoodBoardCell(item) }
+                    )
+                }
+                "pinned_posts" -> if (ws.showPinnedPosts) {
+                    PinnedPostsWidget(
+                        pinnedPosts = uiState.pinnedPosts,
+                        allPosts = uiState.posts,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onPin = { post -> viewModel.pinPost(post) },
+                        onUnpin = { post -> viewModel.unpinPost(post) }
+                    )
+                }
             }
         }
 

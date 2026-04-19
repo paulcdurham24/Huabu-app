@@ -17,9 +17,12 @@ import com.huabu.app.data.model.*
         ProfileWidgetSettings::class,
         ProfileTheme::class,
         LiveStream::class,
-        ProfileEvent::class
+        ProfileEvent::class,
+        Badge::class,
+        MoodBoardItem::class,
+        PinnedPost::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {
@@ -34,4 +37,7 @@ abstract class HuabuDatabase : RoomDatabase() {
     abstract fun profileThemeDao(): ProfileThemeDao
     abstract fun liveStreamDao(): LiveStreamDao
     abstract fun profileEventDao(): ProfileEventDao
+    abstract fun badgeDao(): BadgeDao
+    abstract fun moodBoardDao(): MoodBoardDao
+    abstract fun pinnedPostDao(): PinnedPostDao
 }

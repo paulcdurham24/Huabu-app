@@ -430,6 +430,9 @@ private val ALL_WIDGETS = listOf(
     WidgetDef("top_friends",   "Top Friends",    "👥"),
     WidgetDef("go_live",        "Go Live",        "🔴"),
     WidgetDef("events",         "Events",         "📅"),
+    WidgetDef("badges",         "Badges",         "🏆"),
+    WidgetDef("mood_board",     "Mood Board",     "🎨"),
+    WidgetDef("pinned_posts",   "Pinned Posts",   "📌"),
 )
 
 @Composable
@@ -547,6 +550,9 @@ fun WidgetSettingsPanel(
                                         "top_friends"   -> s.copy(showTopFriends   = !s.showTopFriends)
                                         "go_live"       -> s.copy(showGoLive       = !s.showGoLive)
                                         "events"        -> s.copy(showEvents        = !s.showEvents)
+                                        "badges"        -> s.copy(showBadges        = !s.showBadges)
+                                        "mood_board"    -> s.copy(showMoodBoard     = !s.showMoodBoard)
+                                        "pinned_posts"  -> s.copy(showPinnedPosts   = !s.showPinnedPosts)
                                         else -> s
                                     }
                                 }

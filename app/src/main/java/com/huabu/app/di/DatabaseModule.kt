@@ -57,4 +57,13 @@ object DatabaseModule {
 
     @Provides
     fun provideProfileEventDao(db: HuabuDatabase): ProfileEventDao = db.profileEventDao()
+
+    @Provides
+    fun provideBadgeDao(db: HuabuDatabase): BadgeDao = db.badgeDao()
+
+    @Provides
+    fun provideMoodBoardDao(db: HuabuDatabase): MoodBoardDao = db.moodBoardDao()
+
+    @Provides
+    fun providePinnedPostDao(db: HuabuDatabase): PinnedPostDao = db.pinnedPostDao()
 }

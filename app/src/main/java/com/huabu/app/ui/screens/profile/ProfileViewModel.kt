@@ -21,6 +21,9 @@ data class ProfileUiState(
     val theme: ProfileTheme = ProfileTheme(""),
     val liveStream: LiveStream = LiveStream(""),
     val events: List<ProfileEvent> = emptyList(),
+    val badges: List<Badge> = emptyList(),
+    val moodBoard: List<MoodBoardItem> = emptyList(),
+    val pinnedPosts: List<Post> = emptyList(),
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
@@ -38,7 +41,10 @@ class ProfileViewModel @Inject constructor(
     private val profileWidgetSettingsDao: ProfileWidgetSettingsDao,
     private val profileThemeDao: ProfileThemeDao,
     private val liveStreamDao: LiveStreamDao,
-    private val profileEventDao: ProfileEventDao
+    private val profileEventDao: ProfileEventDao,
+    private val badgeDao: BadgeDao,
+    private val moodBoardDao: MoodBoardDao,
+    private val pinnedPostDao: PinnedPostDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -105,6 +111,53 @@ class ProfileViewModel @Inject constructor(
                 _uiState.update { it.copy(events = events) }
             }
         }
+
+        viewModelScope.launch {
+            badgeDao.getBadgesForUser(resolvedId).collect { badges ->
+                val shown = if (badges.isEmpty()) getMockBadges(resolvedId) else badges
+                _uiState.update { it.copy(badges = shown) }
+            }
+        }
+
+        viewModelScope.launch {
+            moodBoardDao.getMoodBoardForUser(resolvedId).collect { items ->
+                _uiState.update { it.copy(moodBoard = items) }
+            }
+        }
+
+        viewModelScope.launch {
+            pinnedPostDao.getPinnedPostsForUser(resolvedId).collect { pins ->
+                val posts = _uiState.value.posts
+                val pinned = pins.mapNotNull { pin -> posts.find { it.id == pin.postId } }
+                _uiState.update { it.copy(pinnedPosts = pinned) }
+            }
+        }
+    }
+
+    fun updateMoodBoardCell(item: MoodBoardItem) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = item.copy(userId = userId)
+        viewModelScope.launch { moodBoardDao.upsertItem(withUser) }
+    }
+
+    fun pinPost(post: Post) {
+        val userId = _uiState.value.user?.id ?: return
+        val current = _uiState.value.pinnedPosts
+        if (current.size >= 3) return
+        val pin = PinnedPost(
+            id = "pin_${userId}_${post.id}",
+            userId = userId,
+            postId = post.id,
+            pinOrder = current.size
+        )
+        _uiState.update { it.copy(pinnedPosts = it.pinnedPosts + post) }
+        viewModelScope.launch { pinnedPostDao.pinPost(pin) }
+    }
+
+    fun unpinPost(post: Post) {
+        val userId = _uiState.value.user?.id ?: return
+        _uiState.update { it.copy(pinnedPosts = it.pinnedPosts.filter { p -> p.id != post.id }) }
+        viewModelScope.launch { pinnedPostDao.unpinPost(post.id, userId) }
     }
 
     fun goLive(title: String) {
@@ -260,5 +313,14 @@ class ProfileViewModel @Inject constructor(
         MediaTrack("fi3", userId, MediaTrackType.FILM, "Everything Everywhere All at Once", "Daniels", "", "2022", 3),
         MediaTrack("fi4", userId, MediaTrackType.FILM, "Parasite", "Bong Joon-ho", "", "2019", 4),
         MediaTrack("fi5", userId, MediaTrackType.FILM, "Dune", "Denis Villeneuve", "", "2021", 5)
+    )
+
+    private fun getMockBadges(userId: String): List<Badge> = listOf(
+        Badge("og_member",       userId, "OG Member",       "⭐", "One of the first to join Huabu",       BadgeRarity.LEGENDARY),
+        Badge("music_lover",     userId, "Music Lover",     "🎵", "Added a profile song",                 BadgeRarity.COMMON),
+        Badge("customiser",      userId, "Customiser",      "🎨", "Customised their profile theme",       BadgeRarity.COMMON),
+        Badge("social_butterfly",userId, "Social Butterfly","🦋", "Has 100+ friends",                     BadgeRarity.RARE),
+        Badge("creator",         userId, "Creator",         "🎨", "Shared original creative content",     BadgeRarity.EPIC),
+        Badge("popular",         userId, "Popular",         "💫", "Post with 50+ likes",                  BadgeRarity.EPIC),
     )
 }
