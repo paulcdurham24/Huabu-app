@@ -9,6 +9,9 @@ interface FriendDao {
     @Query("SELECT * FROM friends WHERE userId = :userId ORDER BY isTopFriend DESC, topFriendRank ASC")
     fun getFriends(userId: String): Flow<List<Friend>>
 
+    @Query("SELECT * FROM friends WHERE userId = :userId")
+    fun getAllFriends(userId: String): Flow<List<Friend>>
+
     @Query("SELECT * FROM friends WHERE userId = :userId AND isTopFriend = 1 ORDER BY topFriendRank ASC LIMIT 8")
     fun getTopFriends(userId: String): Flow<List<Friend>>
 

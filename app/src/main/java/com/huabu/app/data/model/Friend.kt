@@ -13,5 +13,6 @@ data class Friend(
     val friendImageUrl: String = "",
     val isTopFriend: Boolean = false,
     val topFriendRank: Int = -1,
-    val addedAt: Long = System.currentTimeMillis()
+    val addedAt: Long = System.currentTimeMillis(),
+    val status: String = "accepted" // pending, accepted, rejected
 )

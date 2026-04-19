@@ -2,9 +2,11 @@ package com.huabu.app.data.local
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import com.huabu.app.data.local.dao.*
 import com.huabu.app.data.model.*
 
+@TypeConverters(Converters::class)
 @Database(
     entities = [
         User::class,
@@ -40,9 +42,11 @@ import com.huabu.app.data.model.*
         TravelWish::class,
         TicTacToeGame::class,
         MinesweeperGame::class,
-        GameInvite::class
+        GameInvite::class,
+        Conversation::class,
+        Notification::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {
@@ -77,4 +81,6 @@ abstract class HuabuDatabase : RoomDatabase() {
     abstract fun ticTacToeDao(): TicTacToeDao
     abstract fun minesweeperDao(): MinesweeperDao
     abstract fun gameInviteDao(): GameInviteDao
+    abstract fun conversationDao(): ConversationDao
+    abstract fun notificationDao(): NotificationDao
 }

@@ -117,4 +117,10 @@ object DatabaseModule {
 
     @Provides
     fun provideGameInviteDao(db: HuabuDatabase): GameInviteDao = db.gameInviteDao()
+
+    @Provides
+    fun provideConversationDao(db: HuabuDatabase): ConversationDao = db.conversationDao()
+
+    @Provides
+    fun provideNotificationDao(db: HuabuDatabase): NotificationDao = db.notificationDao()
 }
