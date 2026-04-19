@@ -14,12 +14,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.huabu.app.data.firebase.AuthState
 import com.huabu.app.ui.components.GlitterCanvas
+import com.huabu.app.ui.screens.auth.AuthViewModel
 import com.huabu.app.ui.theme.*
 import kotlinx.coroutines.delay
 
 @Composable
-fun SplashScreen(onNavigateToLogin: () -> Unit) {
+fun SplashScreen(
+    onNavigateToLogin: () -> Unit,
+    onNavigateToFeed: () -> Unit,
+    viewModel: AuthViewModel = hiltViewModel()
+) {
+    val authState by viewModel.authState.collectAsState()
     val infiniteTransition = rememberInfiniteTransition(label = "splash")
 
     val scale by infiniteTransition.animateFloat(
@@ -38,9 +46,19 @@ fun SplashScreen(onNavigateToLogin: () -> Unit) {
         label = "alpha"
     )
 
+    // Wait for splash animation then check auth state
     LaunchedEffect(Unit) {
         delay(1500)
-        onNavigateToLogin()
+        // Auth state will determine navigation
+    }
+
+    // Navigate based on auth state
+    LaunchedEffect(authState) {
+        when (authState) {
+            is AuthState.Authenticated -> onNavigateToFeed()
+            is AuthState.Unauthenticated -> onNavigateToLogin()
+            else -> { /* Loading - stay on splash */ }
+        }
     }
 
     Box(

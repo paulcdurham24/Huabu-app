@@ -24,22 +24,26 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.huabu.app.ui.theme.*
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
-    onNavigateToSignup: () -> Unit
+    onNavigateToSignup: () -> Unit,
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    val loginState by viewModel.loginState.collectAsState()
     var passwordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Handle login success
+    LaunchedEffect(loginState.loginSuccess) {
+        if (loginState.loginSuccess) {
+            viewModel.onLoginSuccessHandled()
+            onLoginSuccess()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -122,9 +126,9 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     // Error message
-                    if (errorMessage != null) {
+                    if (loginState.errorMessage != null) {
                         Text(
-                            text = errorMessage!!,
+                            text = loginState.errorMessage!!,
                             color = MaterialTheme.colorScheme.error,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(bottom = 16.dp)
@@ -133,8 +137,8 @@ fun LoginScreen(
 
                     // Email field
                     OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it; errorMessage = null },
+                        value = loginState.email,
+                        onValueChange = { viewModel.onLoginEmailChange(it) },
                         label = { Text("Email", color = HuabuSilver) },
                         leadingIcon = {
                             Icon(Icons.Filled.Email, contentDescription = null, tint = HuabuHotPink)
@@ -159,8 +163,8 @@ fun LoginScreen(
 
                     // Password field
                     OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it; errorMessage = null },
+                        value = loginState.password,
+                        onValueChange = { viewModel.onLoginPasswordChange(it) },
                         label = { Text("Password", color = HuabuSilver) },
                         leadingIcon = {
                             Icon(Icons.Filled.Lock, contentDescription = null, tint = HuabuHotPink)
@@ -205,28 +209,15 @@ fun LoginScreen(
 
                     // Login Button
                     Button(
-                        onClick = {
-                            if (email.isBlank() || password.isBlank()) {
-                                errorMessage = "Please fill in all fields"
-                                return@Button
-                            }
-                            // DEMO MODE: For testing without Firebase
-                            isLoading = true
-                            // Simulate login
-                            kotlinx.coroutines.MainScope().launch {
-                                kotlinx.coroutines.delay(1500)
-                                isLoading = false
-                                onLoginSuccess()
-                            }
-                        },
-                        enabled = !isLoading,
+                        onClick = { viewModel.login() },
+                        enabled = !loginState.isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = HuabuHotPink)
                     ) {
-                        if (isLoading) {
+                        if (loginState.isLoading) {
                             CircularProgressIndicator(
                                 color = Color.White,
                                 modifier = Modifier.size(24.dp),

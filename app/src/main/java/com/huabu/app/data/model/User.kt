@@ -8,6 +8,7 @@ data class User(
     @PrimaryKey val id: String,
     val username: String,
     val displayName: String,
+    val email: String = "",
     val bio: String = "",
     val profileImageUrl: String = "",
     val backgroundImageUrl: String = "",

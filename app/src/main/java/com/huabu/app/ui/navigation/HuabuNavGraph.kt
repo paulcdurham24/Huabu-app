@@ -89,11 +89,18 @@ fun HuabuNavGraph() {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Splash.route) {
-                SplashScreen(onNavigateToLogin = {
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(Screen.Splash.route) { inclusive = true }
+                SplashScreen(
+                    onNavigateToLogin = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToFeed = {
+                        navController.navigate(Screen.Feed.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
                     }
-                })
+                )
             }
             composable(Screen.Feed.route) {
                 FeedScreen(

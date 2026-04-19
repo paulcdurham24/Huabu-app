@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.huabu.app.ui.screens.auth.AuthViewModel
 import com.huabu.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,9 +28,16 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
     onNavigateToPrivacy: () -> Unit,
-    onNavigateToNotifications: () -> Unit
+    onNavigateToNotifications: () -> Unit,
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // Handle logout
+    fun handleLogout() {
+        viewModel.logout()
+        onLogout()
+    }
 
     Scaffold(
         topBar = {
@@ -167,7 +176,7 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         showLogoutDialog = false
-                        onLogout()
+                        handleLogout()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE74C3C))
                 ) { Text("Log Out") }

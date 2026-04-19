@@ -22,25 +22,26 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.huabu.app.ui.theme.*
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignupScreen(
     onSignupSuccess: () -> Unit,
-    onNavigateToLogin: () -> Unit
+    onNavigateToLogin: () -> Unit,
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
-    var displayName by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
+    val signupState by viewModel.signupState.collectAsState()
     var passwordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Handle signup success
+    LaunchedEffect(signupState.signupSuccess) {
+        if (signupState.signupSuccess) {
+            viewModel.onSignupSuccessHandled()
+            onSignupSuccess()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -124,9 +125,9 @@ fun SignupScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     // Error message
-                    if (errorMessage != null) {
+                    if (signupState.errorMessage != null) {
                         Text(
-                            text = errorMessage!!,
+                            text = signupState.errorMessage!!,
                             color = MaterialTheme.colorScheme.error,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(bottom = 16.dp)
@@ -135,8 +136,8 @@ fun SignupScreen(
 
                     // Display Name field
                     OutlinedTextField(
-                        value = displayName,
-                        onValueChange = { displayName = it; errorMessage = null },
+                        value = signupState.displayName,
+                        onValueChange = { viewModel.onSignupDisplayNameChange(it) },
                         label = { Text("Display Name", color = HuabuSilver) },
                         leadingIcon = {
                             Icon(Icons.Filled.Person, contentDescription = null, tint = HuabuHotPink)
@@ -160,8 +161,8 @@ fun SignupScreen(
 
                     // Username field
                     OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it; errorMessage = null },
+                        value = signupState.username,
+                        onValueChange = { viewModel.onSignupUsernameChange(it) },
                         label = { Text("Username", color = HuabuSilver) },
                         leadingIcon = {
                             Icon(Icons.Filled.AlternateEmail, contentDescription = null, tint = HuabuHotPink)
@@ -186,8 +187,8 @@ fun SignupScreen(
 
                     // Email field
                     OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it; errorMessage = null },
+                        value = signupState.email,
+                        onValueChange = { viewModel.onSignupEmailChange(it) },
                         label = { Text("Email", color = HuabuSilver) },
                         leadingIcon = {
                             Icon(Icons.Filled.Email, contentDescription = null, tint = HuabuHotPink)
@@ -212,8 +213,8 @@ fun SignupScreen(
 
                     // Password field
                     OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it; errorMessage = null },
+                        value = signupState.password,
+                        onValueChange = { viewModel.onSignupPasswordChange(it) },
                         label = { Text("Password", color = HuabuSilver) },
                         leadingIcon = {
                             Icon(Icons.Filled.Lock, contentDescription = null, tint = HuabuHotPink)
@@ -248,8 +249,8 @@ fun SignupScreen(
 
                     // Confirm Password field
                     OutlinedTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it; errorMessage = null },
+                        value = signupState.confirmPassword,
+                        onValueChange = { viewModel.onSignupConfirmPasswordChange(it) },
                         label = { Text("Confirm Password", color = HuabuSilver) },
                         leadingIcon = {
                             Icon(Icons.Filled.Lock, contentDescription = null, tint = HuabuHotPink)
@@ -275,33 +276,15 @@ fun SignupScreen(
 
                     // Signup Button
                     Button(
-                        onClick = {
-                            when {
-                                displayName.isBlank() -> errorMessage = "Please enter your display name"
-                                username.isBlank() -> errorMessage = "Please enter a username"
-                                email.isBlank() -> errorMessage = "Please enter your email"
-                                password.isBlank() -> errorMessage = "Please enter a password"
-                                password != confirmPassword -> errorMessage = "Passwords do not match"
-                                password.length < 6 -> errorMessage = "Password must be at least 6 characters"
-                                else -> {
-                                    // DEMO MODE: Simulate signup
-                                    isLoading = true
-                                    MainScope().launch {
-                                        delay(1500)
-                                        isLoading = false
-                                        onSignupSuccess()
-                                    }
-                                }
-                            }
-                        },
-                        enabled = !isLoading,
+                        onClick = { viewModel.signup() },
+                        enabled = !signupState.isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = HuabuNeonGreen)
                     ) {
-                        if (isLoading) {
+                        if (signupState.isLoading) {
                             CircularProgressIndicator(
                                 color = Color.White,
                                 modifier = Modifier.size(24.dp),

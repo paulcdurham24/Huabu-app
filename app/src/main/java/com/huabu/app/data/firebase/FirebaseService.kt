@@ -326,6 +326,7 @@ private fun User.toMap(): Map<String, Any?> = mapOf(
     "id" to id,
     "displayName" to displayName,
     "username" to username,
+    "email" to email,
     "bio" to bio,
     "avatarUrl" to profileImageUrl,
     "backgroundImageUrl" to backgroundImageUrl,
