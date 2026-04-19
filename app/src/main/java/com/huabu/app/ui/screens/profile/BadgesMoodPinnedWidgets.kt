@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -147,7 +149,9 @@ private val MOOD_COLORS = listOf(
 )
 
 private val MOOD_EMOJIS = listOf(
-    "✨","🌙","🔥","💜","🎵","🌊","🌸","💫","🦋",""
+    "✨","🌙","🔥","💜","🎵",
+    "🌊","🌸","💫","🦋","👑",
+    "🎭","💎","🌈","🎨",""
 )
 
 @Composable
@@ -279,7 +283,10 @@ private fun MoodCellEditor(
             Text("✏️ Edit Cell ${position + 1}", color = HuabuGold, fontWeight = FontWeight.ExtraBold)
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
                 // Colour picker
                 Text("Colour", color = HuabuSilver, style = MaterialTheme.typography.labelMedium)
                 LazyVerticalGrid(
@@ -310,7 +317,7 @@ private fun MoodCellEditor(
                 Text("Emoji", color = HuabuSilver, style = MaterialTheme.typography.labelMedium)
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(5),
-                    modifier = Modifier.height(50.dp),
+                    modifier = Modifier.height(132.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     userScrollEnabled = false
