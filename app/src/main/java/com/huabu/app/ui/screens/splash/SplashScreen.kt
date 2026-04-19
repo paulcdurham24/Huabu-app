@@ -19,7 +19,7 @@ import com.huabu.app.ui.theme.*
 import kotlinx.coroutines.delay
 
 @Composable
-fun SplashScreen(onNavigateToFeed: () -> Unit) {
+fun SplashScreen(onNavigateToLogin: () -> Unit) {
     val infiniteTransition = rememberInfiniteTransition(label = "splash")
 
     val scale by infiniteTransition.animateFloat(
@@ -40,7 +40,7 @@ fun SplashScreen(onNavigateToFeed: () -> Unit) {
 
     LaunchedEffect(Unit) {
         delay(1500)
-        onNavigateToFeed()
+        onNavigateToLogin()
     }
 
     Box(

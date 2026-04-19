@@ -27,6 +27,8 @@ import com.huabu.app.ui.screens.compose.ComposePostScreen
 import com.huabu.app.ui.screens.settings.SettingsScreen
 import com.huabu.app.ui.screens.notifications.NotificationsScreen
 import com.huabu.app.ui.screens.messages.ChatScreen
+import com.huabu.app.ui.screens.auth.LoginScreen
+import com.huabu.app.ui.screens.auth.SignupScreen
 import com.huabu.app.ui.components.HuabuBottomNav
 
 sealed class Screen(val route: String) {
@@ -50,6 +52,8 @@ sealed class Screen(val route: String) {
     object Chat : Screen("chat/{conversationId}") {
         fun createRoute(conversationId: String) = "chat/$conversationId"
     }
+    object Login : Screen("login")
+    object Signup : Screen("signup")
 }
 
 val bottomNavScreens = listOf(Screen.Feed, Screen.Friends, Screen.Messages, Screen.Search)
@@ -65,6 +69,9 @@ fun HuabuNavGraph() {
     val hideBottomBar = currentRoute?.startsWith("theme_editor/") == true
         || currentRoute?.startsWith("edit_profile/") == true
         || currentRoute?.startsWith("chat/") == true
+        || currentRoute == Screen.Login.route
+        || currentRoute == Screen.Signup.route
+        || currentRoute == Screen.Splash.route
 
     Scaffold(
         bottomBar = {
@@ -82,8 +89,8 @@ fun HuabuNavGraph() {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Splash.route) {
-                SplashScreen(onNavigateToFeed = {
-                    navController.navigate(Screen.Feed.route) {
+                SplashScreen(onNavigateToLogin = {
+                    navController.navigate(Screen.Login.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 })
@@ -219,6 +226,30 @@ fun HuabuNavGraph() {
                     onBack = { navController.popBackStack() },
                     onNavigateToProfile = { userId ->
                         navController.navigate(Screen.Profile.createRoute(userId))
+                    }
+                )
+            }
+            composable(Screen.Login.route) {
+                LoginScreen(
+                    onLoginSuccess = {
+                        navController.navigate(Screen.Feed.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToSignup = {
+                        navController.navigate(Screen.Signup.route)
+                    }
+                )
+            }
+            composable(Screen.Signup.route) {
+                SignupScreen(
+                    onSignupSuccess = {
+                        navController.navigate(Screen.Feed.route) {
+                            popUpTo(Screen.Signup.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToLogin = {
+                        navController.popBackStack()
                     }
                 )
             }
