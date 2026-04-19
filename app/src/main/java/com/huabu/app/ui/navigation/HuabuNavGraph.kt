@@ -24,6 +24,9 @@ import com.huabu.app.ui.screens.profile.ProfileViewModel
 import com.huabu.app.ui.screens.search.SearchScreen
 import com.huabu.app.ui.screens.splash.SplashScreen
 import com.huabu.app.ui.screens.compose.ComposePostScreen
+import com.huabu.app.ui.screens.settings.SettingsScreen
+import com.huabu.app.ui.screens.notifications.NotificationsScreen
+import com.huabu.app.ui.screens.messages.ChatScreen
 import com.huabu.app.ui.components.HuabuBottomNav
 
 sealed class Screen(val route: String) {
@@ -42,6 +45,11 @@ sealed class Screen(val route: String) {
     object EditProfile : Screen("edit_profile/{userId}") {
         fun createRoute(userId: String) = "edit_profile/$userId"
     }
+    object Settings : Screen("settings")
+    object Notifications : Screen("notifications")
+    object Chat : Screen("chat/{conversationId}") {
+        fun createRoute(conversationId: String) = "chat/$conversationId"
+    }
 }
 
 val bottomNavScreens = listOf(Screen.Feed, Screen.Friends, Screen.Messages, Screen.Search)
@@ -56,6 +64,7 @@ fun HuabuNavGraph() {
     val showBottomBar = currentRoute in bottomRoutes || currentRoute?.startsWith("profile/") == true
     val hideBottomBar = currentRoute?.startsWith("theme_editor/") == true
         || currentRoute?.startsWith("edit_profile/") == true
+        || currentRoute?.startsWith("chat/") == true
 
     Scaffold(
         bottomBar = {
@@ -106,7 +115,8 @@ fun HuabuNavGraph() {
                     },
                     onNavigateToEditProfile = { uid ->
                         navController.navigate(Screen.EditProfile.createRoute(uid))
-                    }
+                    },
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
                 )
             }
             composable(Screen.Friends.route) {
@@ -120,6 +130,9 @@ fun HuabuNavGraph() {
                 MessagesScreen(
                     onNavigateToProfile = { userId ->
                         navController.navigate(Screen.Profile.createRoute(userId))
+                    },
+                    onNavigateToChat = { conversationId ->
+                        navController.navigate(Screen.Chat.createRoute(conversationId))
                     }
                 )
             }
@@ -173,6 +186,40 @@ fun HuabuNavGraph() {
                 ComposePostScreen(
                     onPostSubmitted = { navController.popBackStack() },
                     onBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onLogout = {
+                        // Navigate to splash/login after logout
+                        navController.navigate(Screen.Splash.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    onNavigateToPrivacy = { /* TODO: Privacy screen */ },
+                    onNavigateToNotifications = { navController.navigate(Screen.Notifications.route) }
+                )
+            }
+            composable(Screen.Notifications.route) {
+                NotificationsScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigateToProfile = { userId ->
+                        navController.navigate(Screen.Profile.createRoute(userId))
+                    }
+                )
+            }
+            composable(
+                route = Screen.Chat.route,
+                arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
+                ChatScreen(
+                    conversationId = conversationId,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToProfile = { userId ->
+                        navController.navigate(Screen.Profile.createRoute(userId))
+                    }
                 )
             }
         }

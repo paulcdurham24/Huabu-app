@@ -38,7 +38,10 @@ data class MockConvo(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MessagesScreen(onNavigateToProfile: (String) -> Unit) {
+fun MessagesScreen(
+    onNavigateToProfile: (String) -> Unit,
+    onNavigateToChat: (String) -> Unit = {}
+) {
     var searchQuery by remember { mutableStateOf("") }
 
     val convos = remember {
@@ -108,7 +111,7 @@ fun MessagesScreen(onNavigateToProfile: (String) -> Unit) {
             items(filtered, key = { it.id }) { convo ->
                 ConversationItem(
                     convo = convo,
-                    onClick = { onNavigateToProfile(convo.id) }
+                    onClick = { onNavigateToChat(convo.id) }
                 )
                 HorizontalDivider(
                     modifier = Modifier.padding(start = 76.dp),

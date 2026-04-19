@@ -39,6 +39,7 @@ fun ProfileScreen(
     onNavigateToProfile: (String) -> Unit,
     onNavigateToThemeEditor: (String) -> Unit = {},
     onNavigateToEditProfile: (String) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -84,7 +85,8 @@ fun ProfileScreen(
                 onMessageClick = onNavigateToMessages,
                 onCustomiseClick = { showWidgetSettings = true },
                 onEditThemeClick = { onNavigateToThemeEditor(userId) },
-                onEditProfileClick = { onNavigateToEditProfile(userId) }
+                onEditProfileClick = { onNavigateToEditProfile(userId) },
+                onSettingsClick = onNavigateToSettings
             )
         }
 
@@ -402,7 +404,8 @@ private fun ProfileInfoCard(
     onMessageClick: () -> Unit,
     onCustomiseClick: () -> Unit = {},
     onEditThemeClick: () -> Unit = {},
-    onEditProfileClick: () -> Unit = {}
+    onEditProfileClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -576,11 +579,21 @@ private fun ProfileInfoCard(
                         onClick = onEditThemeClick,
                         shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
                     ) {
-                        Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(3.dp))
-                        Text("Theme", fontSize = 12.sp, maxLines = 1)
+                        Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(2.dp))
+                        Text("Theme", fontSize = 11.sp, maxLines = 1)
+                    }
+                    OutlinedButton(
+                        onClick = onSettingsClick,
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Filled.Settings, contentDescription = null, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(2.dp))
+                        Text("Settings", fontSize = 11.sp, maxLines = 1)
                     }
                 }
             }
