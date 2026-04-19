@@ -24,9 +24,12 @@ import com.huabu.app.data.model.*
         RecentTrack::class,
         PlaylistItem::class,
         CurrentlyReading::class,
-        CurrentlyWatching::class
+        CurrentlyWatching::class,
+        NftItem::class,
+        ProfilePoll::class,
+        PollVote::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {
@@ -48,4 +51,6 @@ abstract class HuabuDatabase : RoomDatabase() {
     abstract fun playlistItemDao(): PlaylistItemDao
     abstract fun currentlyReadingDao(): CurrentlyReadingDao
     abstract fun currentlyWatchingDao(): CurrentlyWatchingDao
+    abstract fun nftItemDao(): NftItemDao
+    abstract fun profilePollDao(): ProfilePollDao
 }

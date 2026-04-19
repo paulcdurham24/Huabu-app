@@ -194,6 +194,24 @@ fun ProfileScreen(
                         onClear = { viewModel.clearCurrentlyWatching() }
                     )
                 }
+                "nft_showcase" -> if (ws.showNftShowcase) {
+                    NftShowcaseWidget(
+                        nfts = uiState.nfts,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAdd = { nft -> viewModel.addNft(nft) },
+                        onDelete = { nft -> viewModel.deleteNft(nft) }
+                    )
+                }
+                "polls" -> if (ws.showPolls) {
+                    PollsWidget(
+                        polls = uiState.polls,
+                        isCurrentUser = uiState.isCurrentUser,
+                        userId = uiState.user?.id ?: "",
+                        onCreatePoll = { poll -> viewModel.createPoll(poll) },
+                        onDeletePoll = { poll -> viewModel.deletePoll(poll) },
+                        onVote = { pollId, option -> viewModel.voteOnPoll(pollId, option) }
+                    )
+                }
             }
         }
 

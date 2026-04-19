@@ -78,4 +78,10 @@ object DatabaseModule {
 
     @Provides
     fun provideCurrentlyWatchingDao(db: HuabuDatabase): CurrentlyWatchingDao = db.currentlyWatchingDao()
+
+    @Provides
+    fun provideNftItemDao(db: HuabuDatabase): NftItemDao = db.nftItemDao()
+
+    @Provides
+    fun provideProfilePollDao(db: HuabuDatabase): ProfilePollDao = db.profilePollDao()
 }

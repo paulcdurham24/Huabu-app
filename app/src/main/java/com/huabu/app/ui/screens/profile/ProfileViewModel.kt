@@ -28,6 +28,8 @@ data class ProfileUiState(
     val playlist: List<PlaylistItem> = emptyList(),
     val currentlyReading: CurrentlyReading? = null,
     val currentlyWatching: CurrentlyWatching? = null,
+    val nfts: List<NftItem> = emptyList(),
+    val polls: List<ProfilePoll> = emptyList(),
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
@@ -52,7 +54,9 @@ class ProfileViewModel @Inject constructor(
     private val recentTrackDao: RecentTrackDao,
     private val playlistItemDao: PlaylistItemDao,
     private val currentlyReadingDao: CurrentlyReadingDao,
-    private val currentlyWatchingDao: CurrentlyWatchingDao
+    private val currentlyWatchingDao: CurrentlyWatchingDao,
+    private val nftItemDao: NftItemDao,
+    private val profilePollDao: ProfilePollDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -155,6 +159,19 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             currentlyWatchingDao.getForUser(resolvedId).collect { show ->
                 _uiState.update { it.copy(currentlyWatching = show) }
+            }
+        }
+
+        viewModelScope.launch {
+            nftItemDao.getNftsForUser(resolvedId).collect { nfts ->
+                val shown = if (nfts.isEmpty()) getMockNfts(resolvedId) else nfts
+                _uiState.update { it.copy(nfts = shown) }
+            }
+        }
+
+        viewModelScope.launch {
+            profilePollDao.getActivePolls(resolvedId).collect { polls ->
+                _uiState.update { it.copy(polls = polls) }
             }
         }
 
@@ -383,6 +400,45 @@ class ProfileViewModel @Inject constructor(
         _uiState.update { it.copy(currentlyWatching = null) }
         viewModelScope.launch { currentlyWatchingDao.delete(userId) }
     }
+
+    fun addNft(nft: NftItem) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = nft.copy(userId = userId)
+        viewModelScope.launch { nftItemDao.insertNft(withUser) }
+    }
+
+    fun deleteNft(nft: NftItem) {
+        viewModelScope.launch { nftItemDao.deleteNft(nft.id) }
+    }
+
+    fun createPoll(poll: ProfilePoll) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = poll.copy(userId = userId)
+        viewModelScope.launch { profilePollDao.upsertPoll(withUser) }
+    }
+
+    fun deletePoll(poll: ProfilePoll) {
+        viewModelScope.launch { profilePollDao.deletePoll(poll.id) }
+    }
+
+    fun voteOnPoll(pollId: String, option: Char) {
+        val userId = _uiState.value.user?.id ?: return
+        viewModelScope.launch {
+            profilePollDao.recordVote(PollVote(pollId, userId, option))
+            when (option) {
+                'A' -> profilePollDao.voteA(pollId)
+                'B' -> profilePollDao.voteB(pollId)
+                'C' -> profilePollDao.voteC(pollId)
+                'D' -> profilePollDao.voteD(pollId)
+            }
+        }
+    }
+
+    private fun getMockNfts(userId: String): List<NftItem> = listOf(
+        NftItem("nft1", userId, "Cosmic Voyager #1337", "Stargaze", NftChain.SOLANA, 2.5f, 1.8f),
+        NftItem("nft2", userId, "Bored Ape #9999", "BAYC", NftChain.ETHEREUM, 45.0f, 42.0f),
+        NftItem("nft3", userId, "Cyber Punk #2049", "CyberPunks", NftChain.POLYGON, 0.8f, 0.5f),
+    )
 
     private fun getMockRecentTracks(userId: String): List<RecentTrack> = listOf(
         RecentTrack("rt1", userId, "Blinding Lights",      "The Weeknd",      "#8B0000", System.currentTimeMillis() - 600_000),
