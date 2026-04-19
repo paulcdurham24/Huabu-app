@@ -30,6 +30,9 @@ data class ProfileUiState(
     val currentlyWatching: CurrentlyWatching? = null,
     val nfts: List<NftItem> = emptyList(),
     val polls: List<ProfilePoll> = emptyList(),
+    val codeSnippets: List<CodeSnippet> = emptyList(),
+    val techStack: List<TechStackItem> = emptyList(),
+    val gifs: List<GifItem> = emptyList(),
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
@@ -56,7 +59,10 @@ class ProfileViewModel @Inject constructor(
     private val currentlyReadingDao: CurrentlyReadingDao,
     private val currentlyWatchingDao: CurrentlyWatchingDao,
     private val nftItemDao: NftItemDao,
-    private val profilePollDao: ProfilePollDao
+    private val profilePollDao: ProfilePollDao,
+    private val codeSnippetDao: CodeSnippetDao,
+    private val techStackDao: TechStackDao,
+    private val gifItemDao: GifItemDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -172,6 +178,26 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             profilePollDao.getActivePolls(resolvedId).collect { polls ->
                 _uiState.update { it.copy(polls = polls) }
+            }
+        }
+
+        viewModelScope.launch {
+            codeSnippetDao.getSnippetsForUser(resolvedId).collect { snippets ->
+                val shown = if (snippets.isEmpty()) getMockSnippets(resolvedId) else snippets
+                _uiState.update { it.copy(codeSnippets = shown) }
+            }
+        }
+
+        viewModelScope.launch {
+            techStackDao.getTechStackForUser(resolvedId).collect { items ->
+                val shown = if (items.isEmpty()) getMockTechStack(resolvedId) else items
+                _uiState.update { it.copy(techStack = shown) }
+            }
+        }
+
+        viewModelScope.launch {
+            gifItemDao.getGifsForUser(resolvedId).collect { gifs ->
+                _uiState.update { it.copy(gifs = gifs) }
             }
         }
 
@@ -433,6 +459,72 @@ class ProfileViewModel @Inject constructor(
             }
         }
     }
+
+    fun addCodeSnippet(snippet: CodeSnippet) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = snippet.copy(userId = userId)
+        viewModelScope.launch { codeSnippetDao.insertSnippet(withUser) }
+    }
+
+    fun deleteCodeSnippet(snippet: CodeSnippet) {
+        viewModelScope.launch { codeSnippetDao.deleteSnippet(snippet.id) }
+    }
+
+    fun addTechStackItem(item: TechStackItem) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = item.copy(userId = userId, sortOrder = _uiState.value.techStack.size)
+        viewModelScope.launch { techStackDao.upsertItem(withUser) }
+    }
+
+    fun deleteTechStackItem(item: TechStackItem) {
+        viewModelScope.launch { techStackDao.deleteItem(item.id) }
+    }
+
+    fun addGif(gif: GifItem) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = gif.copy(userId = userId, sortOrder = _uiState.value.gifs.size)
+        viewModelScope.launch { gifItemDao.upsertGif(withUser) }
+    }
+
+    fun deleteGif(gif: GifItem) {
+        viewModelScope.launch { gifItemDao.deleteGif(gif.id) }
+    }
+
+    fun toggleGifRepeat(gif: GifItem) {
+        viewModelScope.launch {
+            gifItemDao.upsertGif(gif.copy(repeat = !gif.repeat))
+        }
+    }
+
+    private fun getMockSnippets(userId: String): List<CodeSnippet> = listOf(
+        CodeSnippet(
+            id = "s1", userId = userId, title = "Retrofit Singleton",
+            code = "object ApiClient {\n    val retrofit = Retrofit.Builder()\n        .baseUrl(BASE_URL)\n        .addConverterFactory(GsonConverterFactory.create())\n        .build()\n}",
+            language = Language.KOTLIN,
+            description = "Clean way to setup Retrofit"
+        ),
+        CodeSnippet(
+            id = "s2", userId = userId, title = "StateFlow Collect",
+            code = "viewModel.uiState\n    .flowWithLifecycle(lifecycle)\n    .collect { state ->\n        updateUi(state)\n    }",
+            language = Language.KOTLIN,
+            description = "Lifecycle-aware collection"
+        ),
+        CodeSnippet(
+            id = "s3", userId = userId, title = "Compose Animation",
+            code = "val alpha by animateFloatAsState(\n    targetValue = if (visible) 1f else 0f,\n    animationSpec = tween(300)\n)",
+            language = Language.KOTLIN,
+            description = "Simple fade animation"
+        )
+    )
+
+    private fun getMockTechStack(userId: String): List<TechStackItem> = listOf(
+        TechStackItem("ts1", userId, "Kotlin", "Mobile", 95, 4f),
+        TechStackItem("ts2", userId, "Jetpack Compose", "Mobile", 90, 2f),
+        TechStackItem("ts3", userId, "Android", "Mobile", 92, 6f),
+        TechStackItem("ts4", userId, "Python", "Backend", 75, 3f),
+        TechStackItem("ts5", userId, "TypeScript", "Frontend", 70, 2f),
+        TechStackItem("ts6", userId, "Docker", "DevOps", 65, 2f)
+    )
 
     private fun getMockNfts(userId: String): List<NftItem> = listOf(
         NftItem("nft1", userId, "Cosmic Voyager #1337", "Stargaze", NftChain.SOLANA, 2.5f, 1.8f),

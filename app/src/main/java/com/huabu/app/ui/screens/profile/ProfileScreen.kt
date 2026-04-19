@@ -212,6 +212,31 @@ fun ProfileScreen(
                         onVote = { pollId, option -> viewModel.voteOnPoll(pollId, option) }
                     )
                 }
+                "code_snippets" -> if (ws.showCodeSnippets) {
+                    CodeSnippetsWidget(
+                        snippets = uiState.codeSnippets,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAdd = { snippet -> viewModel.addCodeSnippet(snippet) },
+                        onDelete = { snippet -> viewModel.deleteCodeSnippet(snippet) }
+                    )
+                }
+                "tech_stack" -> if (ws.showTechStack) {
+                    TechStackWidget(
+                        items = uiState.techStack,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAdd = { item -> viewModel.addTechStackItem(item) },
+                        onDelete = { item -> viewModel.deleteTechStackItem(item) }
+                    )
+                }
+                "gif_showcase" -> if (ws.showGifShowcase) {
+                    GifShowcaseWidget(
+                        gifs = uiState.gifs,
+                        isCurrentUser = uiState.isCurrentUser,
+                        onAdd = { gif -> viewModel.addGif(gif) },
+                        onDelete = { gif -> viewModel.deleteGif(gif) },
+                        onToggleRepeat = { gif -> viewModel.toggleGifRepeat(gif) }
+                    )
+                }
             }
         }
 

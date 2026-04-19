@@ -27,9 +27,12 @@ import com.huabu.app.data.model.*
         CurrentlyWatching::class,
         NftItem::class,
         ProfilePoll::class,
-        PollVote::class
+        PollVote::class,
+        CodeSnippet::class,
+        TechStackItem::class,
+        GifItem::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {
@@ -53,4 +56,7 @@ abstract class HuabuDatabase : RoomDatabase() {
     abstract fun currentlyWatchingDao(): CurrentlyWatchingDao
     abstract fun nftItemDao(): NftItemDao
     abstract fun profilePollDao(): ProfilePollDao
+    abstract fun codeSnippetDao(): CodeSnippetDao
+    abstract fun techStackDao(): TechStackDao
+    abstract fun gifItemDao(): GifItemDao
 }

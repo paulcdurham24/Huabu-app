@@ -84,4 +84,13 @@ object DatabaseModule {
 
     @Provides
     fun provideProfilePollDao(db: HuabuDatabase): ProfilePollDao = db.profilePollDao()
+
+    @Provides
+    fun provideCodeSnippetDao(db: HuabuDatabase): CodeSnippetDao = db.codeSnippetDao()
+
+    @Provides
+    fun provideTechStackDao(db: HuabuDatabase): TechStackDao = db.techStackDao()
+
+    @Provides
+    fun provideGifItemDao(db: HuabuDatabase): GifItemDao = db.gifItemDao()
 }

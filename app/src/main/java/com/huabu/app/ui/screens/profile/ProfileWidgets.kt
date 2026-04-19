@@ -439,6 +439,9 @@ private val ALL_WIDGETS = listOf(
     WidgetDef("currently_watching", "Currently Watching","🎬"),
     WidgetDef("nft_showcase",       "NFT Showcase",      "🖼️"),
     WidgetDef("polls",              "Polls",             "📊"),
+    WidgetDef("code_snippets",      "Code Snippets",     "💻"),
+    WidgetDef("tech_stack",         "Tech Stack",        "🛠️"),
+    WidgetDef("gif_showcase",       "GIF Showcase",      "🎬"),
 )
 
 @Composable
@@ -565,6 +568,9 @@ fun WidgetSettingsPanel(
                                         "currently_watching" -> s.copy(showCurrentlyWatching = !s.showCurrentlyWatching)
                                         "nft_showcase"       -> s.copy(showNftShowcase       = !s.showNftShowcase)
                                         "polls"              -> s.copy(showPolls            = !s.showPolls)
+                                        "code_snippets"      -> s.copy(showCodeSnippets     = !s.showCodeSnippets)
+                                        "tech_stack"         -> s.copy(showTechStack        = !s.showTechStack)
+                                        "gif_showcase"       -> s.copy(showGifShowcase      = !s.showGifShowcase)
                                         else -> s
                                     }
                                 }
