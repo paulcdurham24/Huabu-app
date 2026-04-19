@@ -37,9 +37,12 @@ import com.huabu.app.data.model.*
         GameStats::class,
         DailyScore::class,
         VisitedPlace::class,
-        TravelWish::class
+        TravelWish::class,
+        TicTacToeGame::class,
+        MinesweeperGame::class,
+        GameInvite::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {
@@ -71,4 +74,7 @@ abstract class HuabuDatabase : RoomDatabase() {
     abstract fun gameStatsDao(): GameStatsDao
     abstract fun visitedPlaceDao(): VisitedPlaceDao
     abstract fun travelWishDao(): TravelWishDao
+    abstract fun ticTacToeDao(): TicTacToeDao
+    abstract fun minesweeperDao(): MinesweeperDao
+    abstract fun gameInviteDao(): GameInviteDao
 }

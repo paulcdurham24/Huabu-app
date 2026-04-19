@@ -278,6 +278,23 @@ fun ProfileScreen(
                         onDelete = { wish -> viewModel.deleteTravelWish(wish) }
                     )
                 }
+                "multiplayer_games" -> if (ws.showMultiplayerGames) {
+                    MultiplayerGamesWidget(
+                        ticTacToeGames = uiState.ticTacToeGames,
+                        minesweeperGames = uiState.minesweeperGames,
+                        pendingInvites = uiState.pendingGameInvites,
+                        friends = uiState.topFriends,
+                        isCurrentUser = uiState.isCurrentUser,
+                        userId = uiState.user?.id ?: "",
+                        userName = uiState.user?.displayName ?: "",
+                        onCreateTicTacToe = { oppId, oppName -> viewModel.createTicTacToeGame(oppId, oppName) },
+                        onCreateMinesweeper = { _, _ -> /* TODO */ },
+                        onMakeMove = { gameId, row, col -> viewModel.makeTicTacToeMove(gameId, row, col) },
+                        onAcceptInvite = { invite -> viewModel.acceptGameInvite(invite) },
+                        onDeclineInvite = { invite -> viewModel.declineGameInvite(invite) },
+                        onPlayGame = { _, _ -> }
+                    )
+                }
             }
         }
 

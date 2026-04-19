@@ -38,6 +38,9 @@ data class ProfileUiState(
     val gameStats: List<GameStats> = emptyList(),
     val visitedPlaces: List<VisitedPlace> = emptyList(),
     val travelWishes: List<TravelWish> = emptyList(),
+    val ticTacToeGames: List<TicTacToeGame> = emptyList(),
+    val minesweeperGames: List<MinesweeperGame> = emptyList(),
+    val pendingGameInvites: List<GameInvite> = emptyList(),
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
@@ -72,7 +75,10 @@ class ProfileViewModel @Inject constructor(
     private val memeItemDao: MemeItemDao,
     private val gameStatsDao: GameStatsDao,
     private val visitedPlaceDao: VisitedPlaceDao,
-    private val travelWishDao: TravelWishDao
+    private val travelWishDao: TravelWishDao,
+    private val ticTacToeDao: TicTacToeDao,
+    private val minesweeperDao: MinesweeperDao,
+    private val gameInviteDao: GameInviteDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -238,6 +244,18 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             travelWishDao.getTravelWishes(resolvedId).collect { wishes ->
                 _uiState.update { it.copy(travelWishes = wishes) }
+            }
+        }
+
+        viewModelScope.launch {
+            ticTacToeDao.getGamesForUser(resolvedId).collect { games ->
+                _uiState.update { it.copy(ticTacToeGames = games) }
+            }
+        }
+
+        viewModelScope.launch {
+            gameInviteDao.getPendingInvitesForUser(resolvedId).collect { invites ->
+                _uiState.update { it.copy(pendingGameInvites = invites) }
             }
         }
 
@@ -595,6 +613,82 @@ class ProfileViewModel @Inject constructor(
 
     fun deleteTravelWish(wish: TravelWish) {
         viewModelScope.launch { travelWishDao.deleteWish(wish.id) }
+    }
+
+    // ─────────────────────────────────────────────
+    // MULTIPLAYER GAMES
+    // ─────────────────────────────────────────────
+
+    fun createTicTacToeGame(opponentId: String, opponentName: String) {
+        val userId = _uiState.value.user?.id ?: return
+        val userName = _uiState.value.user?.displayName ?: "You"
+        val gameId = "ttt_${System.currentTimeMillis()}"
+
+        viewModelScope.launch {
+            // Create game
+            val game = TicTacToeGame(
+                id = gameId,
+                playerXId = userId,
+                playerXName = userName,
+                playerOId = opponentId,
+                playerOName = opponentName,
+                status = GameStatus.WAITING
+            )
+            ticTacToeDao.upsertGame(game)
+
+            // Send invite
+            gameInviteDao.sendInvite(GameInvite(
+                id = "invite_${System.currentTimeMillis()}",
+                gameType = GameType2P.TICTACTOE,
+                gameId = gameId,
+                fromUserId = userId,
+                fromUserName = userName,
+                toUserId = opponentId,
+                toUserName = opponentName,
+                message = "Want to play Tic Tac Toe?"
+            ))
+        }
+    }
+
+    fun acceptGameInvite(invite: GameInvite) {
+        viewModelScope.launch {
+            gameInviteDao.respondToInvite(invite.id, InviteStatus.ACCEPTED)
+
+            // Update game to active
+            when (invite.gameType) {
+                GameType2P.TICTACTOE -> {
+                    val userId = _uiState.value.user?.id ?: return@launch
+                    val userName = _uiState.value.user?.displayName ?: "Opponent"
+                    val game = ticTacToeDao.getGameById(invite.gameId) ?: return@launch
+                    ticTacToeDao.upsertGame(game.copy(
+                        playerOId = if (game.playerOId.isEmpty()) userId else game.playerOId,
+                        playerOName = if (game.playerOName.isEmpty()) userName else game.playerOName,
+                        status = GameStatus.ACTIVE
+                    ))
+                }
+                GameType2P.MINESWEEPER -> {
+                    // TODO: Minesweeper join logic
+                }
+            }
+        }
+    }
+
+    fun declineGameInvite(invite: GameInvite) {
+        viewModelScope.launch {
+            gameInviteDao.respondToInvite(invite.id, InviteStatus.DECLINED)
+        }
+    }
+
+    fun makeTicTacToeMove(gameId: String, row: Int, col: Int) {
+        val userId = _uiState.value.user?.id ?: return
+        viewModelScope.launch {
+            val game = ticTacToeDao.getGameById(gameId) ?: return@launch
+            val playerSymbol = if (game.playerXId == userId) "X" else "O"
+
+            game.makeMove(row, col, playerSymbol)?.let { updatedGame ->
+                ticTacToeDao.upsertGame(updatedGame)
+            }
+        }
     }
 
     private fun getMockSnippets(userId: String): List<CodeSnippet> = listOf(

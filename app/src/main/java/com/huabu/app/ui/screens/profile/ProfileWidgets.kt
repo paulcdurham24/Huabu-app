@@ -447,6 +447,7 @@ private val ALL_WIDGETS = listOf(
     WidgetDef("game_stats",         "Game Stats",        "🎮"),
     WidgetDef("visited_places",     "Visited Places",    "✈️"),
     WidgetDef("travel_wishlist",    "Travel Wishlist",   "🌎"),
+    WidgetDef("multiplayer_games",  "Multiplayer Games", "🎮"),
 )
 
 @Composable
@@ -581,6 +582,7 @@ fun WidgetSettingsPanel(
                                         "game_stats"         -> s.copy(showGameStats        = !s.showGameStats)
                                         "visited_places"     -> s.copy(showVisitedPlaces    = !s.showVisitedPlaces)
                                         "travel_wishlist"    -> s.copy(showTravelWishlist   = !s.showTravelWishlist)
+                                        "multiplayer_games"  -> s.copy(showMultiplayerGames = !s.showMultiplayerGames)
                                         else -> s
                                     }
                                 }

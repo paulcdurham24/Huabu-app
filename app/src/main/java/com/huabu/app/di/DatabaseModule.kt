@@ -108,4 +108,13 @@ object DatabaseModule {
 
     @Provides
     fun provideTravelWishDao(db: HuabuDatabase): TravelWishDao = db.travelWishDao()
+
+    @Provides
+    fun provideTicTacToeDao(db: HuabuDatabase): TicTacToeDao = db.ticTacToeDao()
+
+    @Provides
+    fun provideMinesweeperDao(db: HuabuDatabase): MinesweeperDao = db.minesweeperDao()
+
+    @Provides
+    fun provideGameInviteDao(db: HuabuDatabase): GameInviteDao = db.gameInviteDao()
 }
