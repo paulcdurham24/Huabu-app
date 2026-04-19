@@ -439,11 +439,13 @@ fun GameStatsWidget(
     isCurrentUser: Boolean,
     onAdd: (GameStats) -> Unit
 ) {
+    var showAddDialog by remember { mutableStateOf(false) }
+
     WidgetCard(
         title = "🎮 Game Stats",
         titleColor = Color(0xFF7B68EE),
-        action = if (isCurrentUser && stats.isEmpty()) {{
-            IconButton(onClick = { /* Show add dialog */ }, modifier = Modifier.size(28.dp)) {
+        action = if (isCurrentUser) {{
+            IconButton(onClick = { showAddDialog = true }, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Filled.Add, contentDescription = "Add stats", tint = Color(0xFF7B68EE), modifier = Modifier.size(20.dp))
             }
         }} else null
@@ -458,6 +460,16 @@ fun GameStatsWidget(
                 stats.forEach { GameStatCard(it) }
             }
         }
+    }
+
+    if (showAddDialog) {
+        AddGameStatsDialog(
+            onAdd = { gameStats ->
+                showAddDialog = false
+                onAdd(gameStats)
+            },
+            onDismiss = { showAddDialog = false }
+        )
     }
 }
 
@@ -524,6 +536,142 @@ private fun GameStatCard(stats: GameStats) {
         }
     }
 }
+
+@Composable
+private fun AddGameStatsDialog(
+    onAdd: (GameStats) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedGame by remember { mutableStateOf(GameType.WORDLE) }
+    var gamesPlayed by remember { mutableStateOf("10") }
+    var winRate by remember { mutableStateOf("50") }
+    var currentStreak by remember { mutableStateOf("0") }
+    var maxStreak by remember { mutableStateOf("0") }
+
+    val gameColors = mapOf(
+        GameType.WORDLE to Color(0xFF6AAA64),
+        GameType.CONNECTIONS to Color(0xFFFFA500),
+        GameType.STRANDS to Color(0xFFB5A7FF),
+        GameType.MINI_CROSSWORD to Color(0xFF87CEEB),
+        GameType.GEOGuessr to Color(0xFFDC143C),
+        GameType.OTHER to HuabuSilver
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = HuabuCardBg,
+        title = { Text("🎮 Add Game Stats", color = Color(0xFF7B68EE), fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Game selector
+                Text("Game", color = HuabuSilver, style = MaterialTheme.typography.labelMedium)
+                val rows = GameType.entries.chunked(3)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    rows.forEach { rowGames ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            rowGames.forEach { game ->
+                                val color = gameColors[game] ?: HuabuSilver
+                                FilterChip(
+                                    selected = selectedGame == game,
+                                    onClick = { selectedGame = game },
+                                    label = { Text(game.name, fontSize = 9.sp, maxLines = 1) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = color.copy(0.25f),
+                                        selectedLabelColor = color
+                                    )
+                                )
+                            }
+                            repeat(3 - rowGames.size) {
+                                Box(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = gamesPlayed, onValueChange = { gamesPlayed = it.filter { c -> c.isDigit() } },
+                    label = { Text("Games Played", color = HuabuSilver) },
+                    singleLine = true,
+                    colors = gameFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = winRate, onValueChange = { winRate = it.filter { c -> c.isDigit() }.take(3) },
+                    label = { Text("Win Rate % (0-100)", color = HuabuSilver) },
+                    singleLine = true,
+                    colors = gameFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = currentStreak, onValueChange = { currentStreak = it.filter { c -> c.isDigit() } },
+                        label = { Text("Current Streak", color = HuabuSilver, fontSize = 11.sp) },
+                        singleLine = true,
+                        colors = gameFieldColors(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = maxStreak, onValueChange = { maxStreak = it.filter { c -> c.isDigit() } },
+                        label = { Text("Max Streak", color = HuabuSilver, fontSize = 11.sp) },
+                        singleLine = true,
+                        colors = gameFieldColors(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val played = gamesPlayed.toIntOrNull() ?: 0
+                    val rate = (winRate.toIntOrNull() ?: 0) / 100f
+                    val currStreak = currentStreak.toIntOrNull() ?: 0
+                    val max = maxStreak.toIntOrNull() ?: 0
+                    if (played > 0) {
+                        onAdd(GameStats(
+                            id = "game_${System.currentTimeMillis()}",
+                            userId = "",
+                            gameType = selectedGame,
+                            gamesPlayed = played,
+                            winRate = rate.coerceIn(0f, 1f),
+                            streak = currStreak,
+                            maxStreak = max
+                        ))
+                    }
+                },
+                enabled = (gamesPlayed.toIntOrNull() ?: 0) > 0,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7B68EE)),
+                shape = RoundedCornerShape(20.dp)
+            ) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = HuabuSilver) } }
+    )
+}
+
+@Composable
+private fun gameFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = Color(0xFF7B68EE),
+    unfocusedBorderColor = HuabuDivider,
+    focusedTextColor = HuabuOnSurface,
+    unfocusedTextColor = HuabuOnSurface,
+    cursorColor = Color(0xFF7B68EE)
+)
 
 private fun getMockGameStats(): List<GameStats> = listOf(
     GameStats("gs1", "", GameType.WORDLE, score = 450, streak = 12, maxStreak = 45, gamesPlayed = 156, winRate = 0.94f),
