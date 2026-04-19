@@ -395,30 +395,39 @@ private fun ProfileInfoCard(
                     }
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     OutlinedButton(
                         onClick = onEditProfileClick,
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
                     ) {
-                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Edit", fontSize = 13.sp)
+                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("Edit", fontSize = 12.sp, maxLines = 1)
                     }
                     OutlinedButton(
                         onClick = onCustomiseClick,
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
                     ) {
-                        Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Widgets", fontSize = 13.sp)
+                        Icon(Icons.Filled.Tune, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("Widgets", fontSize = 12.sp, maxLines = 1)
                     }
                     OutlinedButton(
                         onClick = onEditThemeClick,
-                        shape = RoundedCornerShape(20.dp)
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
                     ) {
-                        Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Theme", fontSize = 13.sp)
+                        Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("Theme", fontSize = 12.sp, maxLines = 1)
                     }
                 }
             }

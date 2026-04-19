@@ -231,20 +231,18 @@ fun EventsWidget(
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
 
-    WidgetCard(title = "📅 Events", titleColor = HuabuAccentCyan) {
-        if (isCurrentUser) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+    WidgetCard(
+        title = "📅 Events",
+        titleColor = HuabuAccentCyan,
+        action = if (isCurrentUser) {{
+            IconButton(
+                onClick = { showAddDialog = true },
+                modifier = Modifier.size(28.dp)
             ) {
-                IconButton(
-                    onClick = { showAddDialog = true },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add event", tint = HuabuAccentCyan, modifier = Modifier.size(20.dp))
-                }
+                Icon(Icons.Filled.Add, contentDescription = "Add event", tint = HuabuAccentCyan, modifier = Modifier.size(20.dp))
             }
-        }
+        }} else null
+    ) {
         if (events.isEmpty()) {
             Text(
                 text = if (isCurrentUser) "Tap + to add your first event!" else "No upcoming events",
