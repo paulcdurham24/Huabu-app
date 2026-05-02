@@ -22,26 +22,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.huabu.app.data.model.MediaTrack
+import com.huabu.app.data.model.Post
 import com.huabu.app.data.model.User
+import com.huabu.app.ui.components.PostCard
 import com.huabu.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchScreen(onNavigateToProfile: (String) -> Unit) {
+fun SearchScreen(
+    onNavigateToProfile: (String) -> Unit,
+    onNavigateToChat: (String) -> Unit = {},
+    onNavigateToPost: (String) -> Unit = {},
+    viewModel: SearchViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
     var query by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("People") }
 
     val categories = listOf("People", "Posts", "Tags", "Music")
-
-    val mockUsers = remember { generateSearchUsers() }
-    val filtered = if (query.isEmpty()) mockUsers
-    else mockUsers.filter {
-        it.displayName.contains(query, ignoreCase = true) ||
-            it.username.contains(query, ignoreCase = true) ||
-            it.interests.contains(query, ignoreCase = true)
-    }
-
-    val trendingTags = listOf("#huabu", "#mypage", "#top8", "#profilesong", "#aesthetic", "#vibes", "#glitter", "#neonlife")
+    val displayUsers = if (uiState.hasQuery) uiState.results else uiState.trendingUsers
 
     Scaffold(
         topBar = {
@@ -66,7 +67,7 @@ fun SearchScreen(onNavigateToProfile: (String) -> Unit) {
 
                 OutlinedTextField(
                     value = query,
-                    onValueChange = { query = it },
+                    onValueChange = { query = it; viewModel.onQueryChanged(it, selectedCategory) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -74,7 +75,7 @@ fun SearchScreen(onNavigateToProfile: (String) -> Unit) {
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = HuabuSilver) },
                     trailingIcon = {
                         if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
+                            IconButton(onClick = { query = ""; viewModel.onQueryChanged("") }) {
                                 Icon(Icons.Filled.Clear, contentDescription = "Clear", tint = HuabuSilver)
                             }
                         }
@@ -98,7 +99,7 @@ fun SearchScreen(onNavigateToProfile: (String) -> Unit) {
                     items(categories) { cat ->
                         val isSelected = cat == selectedCategory
                         Surface(
-                            onClick = { selectedCategory = cat },
+                            onClick = { selectedCategory = cat; if (query.isNotEmpty()) viewModel.onQueryChanged(query, cat) },
                             shape = RoundedCornerShape(20.dp),
                             color = if (isSelected) HuabuNeonGreen else HuabuCardBg2,
                             modifier = Modifier.border(
@@ -127,27 +128,94 @@ fun SearchScreen(onNavigateToProfile: (String) -> Unit) {
                 .padding(padding),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            if (query.isEmpty()) {
+            if (!uiState.hasQuery && selectedCategory == "Music") {
+                item { SectionLabel(title = "✦ Trending Music ✦") }
+                items(uiState.trendingTracks, key = { it.id }) { track ->
+                    TrackRow(track = track)
+                    HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = HuabuDivider, thickness = 0.5.dp)
+                }
+            } else if (!uiState.hasQuery) {
                 item {
-                    TrendingTagsSection(tags = trendingTags, onTagClick = { query = it.trimStart('#') })
+                    val tagLabels = if (uiState.trendingTags.isNotEmpty())
+                        uiState.trendingTags.map { (tag, _) -> "#$tag" }
+                    else listOf("#huabu", "#mypage", "#top8", "#profilesong", "#aesthetic", "#vibes", "#glitter", "#neonlife")
+                    TrendingTagsSection(tags = tagLabels, onTagClick = { tag ->
+                        query = tag.trimStart('#')
+                        selectedCategory = "Tags"
+                        viewModel.onQueryChanged(query, "Tags")
+                    })
                 }
                 item {
                     Spacer(Modifier.height(8.dp))
                     SectionLabel(title = "✦ Trending Users ✦")
                 }
-            } else {
-                item {
-                    SectionLabel(title = "${filtered.size} results for \"$query\"")
+                items(uiState.trendingUsers, key = { it.id }) { user ->
+                    SearchUserRow(
+                        user = user,
+                        isPending = user.id in uiState.pendingSentIds,
+                        isFollowing = user.id in uiState.followingIds,
+                        onClick = { onNavigateToProfile(user.id) },
+                        onMessage = { viewModel.getConversationForUser(user.id) { onNavigateToChat(it) } },
+                        onAddFriend = { viewModel.sendFriendRequest(user.id) },
+                        onFollow = { viewModel.toggleFollow(user.id) }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = HuabuDivider, thickness = 0.5.dp)
                 }
-            }
-
-            items(filtered, key = { it.id }) { user ->
-                SearchUserRow(user = user, onClick = { onNavigateToProfile(user.id) })
-                HorizontalDivider(
-                    modifier = Modifier.padding(start = 72.dp),
-                    color = HuabuDivider,
-                    thickness = 0.5.dp
-                )
+            } else if (uiState.isSearching) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = HuabuNeonGreen)
+                    }
+                }
+            } else when (selectedCategory) {
+                "Posts" -> {
+                    item { SectionLabel(title = "${uiState.postResults.size} posts for \"$query\"") }
+                    items(uiState.postResults, key = { it.id }) { post ->
+                        PostCard(
+                            post = post,
+                            currentUserId = uiState.currentUserId,
+                            onLike = { viewModel.likePost(post.id) },
+                            onReact = { emoji -> viewModel.reactToPost(post.id, emoji) },
+                            onAuthorClick = { onNavigateToProfile(post.authorId) },
+                            onPostClick = { onNavigateToPost(post.id) }
+                        )
+                    }
+                }
+                "Tags" -> {
+                    item { SectionLabel(title = "${uiState.tagResults.size} posts tagged \"#$query\"") }
+                    items(uiState.tagResults, key = { it.id }) { post ->
+                        PostCard(
+                            post = post,
+                            currentUserId = uiState.currentUserId,
+                            onLike = { viewModel.likePost(post.id) },
+                            onReact = { emoji -> viewModel.reactToPost(post.id, emoji) },
+                            onAuthorClick = { onNavigateToProfile(post.authorId) },
+                            onPostClick = { onNavigateToPost(post.id) }
+                        )
+                    }
+                }
+                "Music" -> {
+                    item { SectionLabel(title = "${uiState.trackResults.size} tracks for \"$query\"") }
+                    items(uiState.trackResults, key = { it.id }) { track ->
+                        TrackRow(track = track)
+                        HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = HuabuDivider, thickness = 0.5.dp)
+                    }
+                }
+                else -> {
+                    item { SectionLabel(title = "${uiState.results.size} results for \"$query\"") }
+                    items(uiState.results, key = { it.id }) { user ->
+                        SearchUserRow(
+                            user = user,
+                            isPending = user.id in uiState.pendingSentIds,
+                            isFollowing = user.id in uiState.followingIds,
+                            onClick = { onNavigateToProfile(user.id) },
+                            onMessage = { viewModel.getConversationForUser(user.id) { onNavigateToChat(it) } },
+                            onAddFriend = { viewModel.sendFriendRequest(user.id) },
+                            onFollow = { viewModel.toggleFollow(user.id) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(start = 72.dp), color = HuabuDivider, thickness = 0.5.dp)
+                    }
+                }
             }
         }
     }
@@ -204,7 +272,15 @@ private fun SectionLabel(title: String) {
 }
 
 @Composable
-private fun SearchUserRow(user: User, onClick: () -> Unit) {
+private fun SearchUserRow(
+    user: User,
+    onClick: () -> Unit,
+    onMessage: () -> Unit = {},
+    onAddFriend: () -> Unit = {},
+    onFollow: () -> Unit = {},
+    isPending: Boolean = false,
+    isFollowing: Boolean = false
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -286,6 +362,38 @@ private fun SearchUserRow(user: User, onClick: () -> Unit) {
                 fontSize = 13.sp
             )
             Text(text = "followers", color = HuabuSilver, fontSize = 11.sp)
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FilledTonalButton(
+                    onClick = onFollow,
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (isFollowing) HuabuNeonGreen.copy(alpha = 0.15f) else HuabuHotPink.copy(alpha = 0.15f)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Icon(
+                        if (isFollowing) Icons.Filled.PersonRemove else Icons.Filled.PersonAdd,
+                        contentDescription = null,
+                        tint = if (isFollowing) HuabuNeonGreen else HuabuHotPink,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        if (isFollowing) "Following" else "Follow",
+                        fontSize = 11.sp,
+                        color = if (isFollowing) HuabuNeonGreen else HuabuHotPink
+                    )
+                }
+                FilledTonalButton(
+                    onClick = onMessage,
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = HuabuElectricBlue.copy(alpha = 0.15f)),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Icon(Icons.Filled.Message, contentDescription = null, tint = HuabuElectricBlue, modifier = Modifier.size(11.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Chat", fontSize = 11.sp, color = HuabuElectricBlue)
+                }
+            }
         }
     }
 }
@@ -295,15 +403,57 @@ private fun formatFollowers(count: Int): String = when {
     else -> count.toString()
 }
 
-private fun generateSearchUsers(): List<User> = listOf(
-    User("u1", "xenastar", "Xena Starfire", mood = "😍", interests = "Music, Art, Fashion", isOnline = true, followersCount = 4280, isVerified = true),
-    User("u2", "djphantom", "DJ Phantom", mood = "🎵", interests = "Music, Mixing, Nightlife", isOnline = true, followersCount = 12030),
-    User("u3", "lunaeclipse", "Luna Eclipse", mood = "🌙", interests = "Astrology, Photography, Writing", followersCount = 3340),
-    User("u4", "retrokid2k", "Retro Kid", mood = "🎮", interests = "Gaming, Anime, Retrowave", followersCount = 890),
-    User("u5", "glitterqueen99", "Glitter Queen", mood = "💅", interests = "Fashion, Beauty, Art", isOnline = true, followersCount = 7770),
-    User("u6", "neonninja", "Neon Ninja", mood = "⚡", interests = "Skateboarding, Music, Street Art", followersCount = 2560),
-    User("u7", "starchaser", "Star Chaser", mood = "🌟", interests = "Astronomy, Sci-Fi, Gaming", isOnline = true, followersCount = 5120),
-    User("u8", "pixelprince", "Pixel Prince", mood = "🎮", interests = "Game Dev, Pixel Art, Anime", followersCount = 1980),
-    User("u9", "cosmicwave", "Cosmic Wave", mood = "🌊", interests = "Music, Surfing, Travel", isOnline = true, followersCount = 6310),
-    User("u10", "velvetdream", "Velvet Dream", mood = "✨", interests = "Poetry, Music, Photography", followersCount = 4450)
-)
+@Composable
+private fun TrackRow(track: MediaTrack) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    Brush.radialGradient(listOf(HuabuDeepPurple, HuabuHotPink))
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (track.artworkUrl.isNotEmpty()) {
+                coil.compose.AsyncImage(
+                    model = track.artworkUrl,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Filled.MusicNote, contentDescription = null, tint = HuabuGold, modifier = Modifier.size(22.dp))
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = track.title,
+                fontWeight = FontWeight.Bold,
+                color = HuabuGold,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (track.subtitle.isNotEmpty()) {
+                Text(
+                    text = track.subtitle,
+                    color = HuabuSilver,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        if (track.year.isNotEmpty()) {
+            Text(text = track.year, color = HuabuSilver, fontSize = 12.sp)
+        }
+    }
+}
+

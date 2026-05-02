@@ -5,13 +5,16 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "messages")
 data class Message(
-    @PrimaryKey val id: String,
+    @PrimaryKey val id: String = "",
     val conversationId: String = "",
-    val senderId: String,
-    val receiverId: String,
-    val senderName: String,
+    val senderId: String = "",
+    val receiverId: String = "",
+    val senderName: String = "",
     val senderImageUrl: String = "",
-    val content: String,
+    val content: String = "",
+    val imageUrl: String = "",
+    val voiceUrl: String = "",
+    val voiceDurationMs: Long = 0L,
     val isRead: Boolean = false,
     val timestamp: Long = System.currentTimeMillis()
 )

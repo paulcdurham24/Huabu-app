@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import android.util.Log
 import com.huabu.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,7 +38,9 @@ fun SignupScreen(
 
     // Handle signup success
     LaunchedEffect(signupState.signupSuccess) {
+        Log.d("SignupScreen", "LaunchedEffect triggered, signupSuccess=${signupState.signupSuccess}")
         if (signupState.signupSuccess) {
+            Log.d("SignupScreen", "Calling onSignupSuccess()")
             viewModel.onSignupSuccessHandled()
             onSignupSuccess()
         }
@@ -282,7 +285,7 @@ fun SignupScreen(
                             .fillMaxWidth()
                             .height(50.dp),
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = HuabuNeonGreen)
+                        colors = ButtonDefaults.buttonColors(containerColor = HuabuNeonGreen, contentColor = Color(0xFF0E0818))
                     ) {
                         if (signupState.isLoading) {
                             CircularProgressIndicator(

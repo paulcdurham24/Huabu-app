@@ -5,9 +5,9 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "users")
 data class User(
-    @PrimaryKey val id: String,
-    val username: String,
-    val displayName: String,
+    @PrimaryKey val id: String = "",
+    val username: String = "",
+    val displayName: String = "",
     val email: String = "",
     val bio: String = "",
     val profileImageUrl: String = "",
@@ -25,8 +25,12 @@ data class User(
     val followersCount: Int = 0,
     val followingCount: Int = 0,
     val postsCount: Int = 0,
+    val profileViewsCount: Int = 0,
     val joinedDate: Long = System.currentTimeMillis(),
     val isVerified: Boolean = false,
     val isOnline: Boolean = false,
-    val lastSeen: Long = System.currentTimeMillis()
+    val lastSeen: Long = System.currentTimeMillis(),
+    val isPrivate: Boolean = false,
+    val defaultPostVisibility: String = "public",
+    val fcmToken: String = ""
 )

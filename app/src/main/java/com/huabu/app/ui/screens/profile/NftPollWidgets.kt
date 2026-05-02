@@ -1,5 +1,7 @@
 package com.huabu.app.ui.screens.profile
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,10 +21,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.huabu.app.data.model.*
 import com.huabu.app.ui.theme.*
 
@@ -105,13 +110,7 @@ private fun NftCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val chainColor = when (nft.chain) {
-        NftChain.ETHEREUM -> Color(0xFF627EEA)
-        NftChain.POLYGON -> Color(0xFF8247E5)
-        NftChain.SOLANA -> Color(0xFF14F195)
-        NftChain.BASE -> Color(0xFF0052FF)
-        NftChain.ARBITRUM -> Color(0xFF28A0F0)
-    }
+    val chainColor = nftChainColor(nft.chain)
 
     Box(
         modifier = Modifier
@@ -119,35 +118,57 @@ private fun NftCard(
             .aspectRatio(1f)
             .clip(RoundedCornerShape(12.dp))
             .background(HuabuCardBg2)
-            .border(1.dp, chainColor.copy(0.3f), RoundedCornerShape(12.dp))
+            .border(1.dp, chainColor.copy(0.4f), RoundedCornerShape(12.dp))
             .clickable { onClick() }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
+        // Art / image
+        if (nft.imageUrl.isNotBlank()) {
+            AsyncImage(
+                model = nft.imageUrl,
+                contentDescription = nft.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(chainColor.copy(0.2f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .fillMaxSize()
+                    .background(Brush.radialGradient(listOf(chainColor.copy(0.3f), HuabuDeepPurple))),
+                contentAlignment = Alignment.Center
             ) {
-                Text(nft.chain.name.take(4), color = chainColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text("🖼️", fontSize = 40.sp)
             }
+        }
 
+        // Dark scrim at bottom for text legibility
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.75f))))
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
             Column {
-                Text(nft.name, color = HuabuOnSurface, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(nft.collection, color = HuabuSilver, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-
-            if (nft.priceEth > 0f) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Icon(Icons.Filled.Diamond, contentDescription = null, tint = chainColor, modifier = Modifier.size(10.dp))
-                    Text("${nft.priceEth} Ξ", color = chainColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(nft.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(nft.collection, color = Color.White.copy(0.7f), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (nft.priceEth > 0f) {
+                        Text("Ξ${nft.priceEth}", color = chainColor, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
+        }
+
+        // Chain badge top-left
+        Box(
+            modifier = Modifier
+                .padding(6.dp)
+                .align(Alignment.TopStart)
+                .clip(RoundedCornerShape(4.dp))
+                .background(chainColor.copy(0.85f))
+                .padding(horizontal = 5.dp, vertical = 2.dp)
+        ) {
+            Text(nft.chain.name.take(4), color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold)
         }
 
         if (isCurrentUser) {
@@ -155,12 +176,20 @@ private fun NftCard(
                 onClick = onDelete,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .size(24.dp)
+                    .size(26.dp)
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "Remove", tint = HuabuSilver.copy(0.6f), modifier = Modifier.size(14.dp))
+                Icon(Icons.Filled.Close, contentDescription = "Remove", tint = Color.White.copy(0.8f), modifier = Modifier.size(14.dp))
             }
         }
     }
+}
+
+private fun nftChainColor(chain: NftChain) = when (chain) {
+    NftChain.ETHEREUM -> Color(0xFF627EEA)
+    NftChain.POLYGON  -> Color(0xFF8247E5)
+    NftChain.SOLANA   -> Color(0xFF14F195)
+    NftChain.BASE     -> Color(0xFF0052FF)
+    NftChain.ARBITRUM -> Color(0xFF28A0F0)
 }
 
 @Composable
@@ -168,25 +197,28 @@ private fun AddNftDialog(
     onAdd: (NftItem) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var collection by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf("") }
+    val accent = Color(0xFF8B5CF6)
+    var name          by remember { mutableStateOf("") }
+    var collection    by remember { mutableStateOf("") }
+    var price         by remember { mutableStateOf("") }
+    var imageUrl      by remember { mutableStateOf("") }
+    var openseaUrl    by remember { mutableStateOf("") }
     var selectedChain by remember { mutableStateOf(NftChain.ETHEREUM) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = HuabuCardBg,
-        title = { Text("🖼️ Add NFT", color = Color(0xFF8B5CF6), fontWeight = FontWeight.ExtraBold) },
+        title = { Text("🖼️ Add NFT", color = accent, fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it },
                     label = { Text("NFT Name", color = HuabuSilver) },
                     singleLine = true,
-                    colors = outlinedFieldColors(Color(0xFF8B5CF6)),
+                    colors = outlinedFieldColors(accent),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -194,40 +226,49 @@ private fun AddNftDialog(
                     value = collection, onValueChange = { collection = it },
                     label = { Text("Collection", color = HuabuSilver) },
                     singleLine = true,
-                    colors = outlinedFieldColors(Color(0xFF8B5CF6)),
+                    colors = outlinedFieldColors(accent),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = imageUrl, onValueChange = { imageUrl = it },
+                    label = { Text("Image URL (optional)", color = HuabuSilver) },
+                    singleLine = true,
+                    colors = outlinedFieldColors(accent),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = openseaUrl, onValueChange = { openseaUrl = it },
+                    label = { Text("OpenSea / Marketplace URL (optional)", color = HuabuSilver) },
+                    singleLine = true,
+                    colors = outlinedFieldColors(accent),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = price, onValueChange = { price = it.filter { c -> c.isDigit() || c == '.' } },
-                    label = { Text("Price (ETH)", color = HuabuSilver) },
+                    label = { Text("Price in ETH (optional)", color = HuabuSilver) },
                     singleLine = true,
-                    colors = outlinedFieldColors(Color(0xFF8B5CF6)),
+                    colors = outlinedFieldColors(accent),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-
                 Text("Blockchain", color = HuabuSilver, style = MaterialTheme.typography.labelMedium)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     NftChain.entries.forEach { chain ->
-                        val chainColor = when (chain) {
-                            NftChain.ETHEREUM -> Color(0xFF627EEA)
-                            NftChain.POLYGON -> Color(0xFF8247E5)
-                            NftChain.SOLANA -> Color(0xFF14F195)
-                            NftChain.BASE -> Color(0xFF0052FF)
-                            NftChain.ARBITRUM -> Color(0xFF28A0F0)
-                        }
+                        val cc = nftChainColor(chain)
                         FilterChip(
                             selected = selectedChain == chain,
                             onClick = { selectedChain = chain },
                             label = { Text(chain.name, fontSize = 9.sp, maxLines = 1) },
                             modifier = Modifier.weight(1f),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = chainColor.copy(0.25f),
-                                selectedLabelColor = chainColor
+                                selectedContainerColor = cc.copy(0.25f),
+                                selectedLabelColor = cc
                             )
                         )
                     }
@@ -244,14 +285,16 @@ private fun AddNftDialog(
                             name = name.trim(),
                             collection = collection.trim().ifEmpty { "Unknown Collection" },
                             chain = selectedChain,
-                            priceEth = price.toFloatOrNull() ?: 0f
+                            priceEth = price.toFloatOrNull() ?: 0f,
+                            imageUrl = imageUrl.trim(),
+                            openseaUrl = openseaUrl.trim()
                         ))
                     }
                 },
                 enabled = name.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                colors = ButtonDefaults.buttonColors(containerColor = accent),
                 shape = RoundedCornerShape(20.dp)
-            ) { Text("Add") }
+            ) { Text("Add", color = Color.White) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = HuabuSilver) } }
     )
@@ -264,13 +307,8 @@ private fun NftDetailDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val chainColor = when (nft.chain) {
-        NftChain.ETHEREUM -> Color(0xFF627EEA)
-        NftChain.POLYGON -> Color(0xFF8247E5)
-        NftChain.SOLANA -> Color(0xFF14F195)
-        NftChain.BASE -> Color(0xFF0052FF)
-        NftChain.ARBITRUM -> Color(0xFF28A0F0)
-    }
+    val chainColor = nftChainColor(nft.chain)
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -283,20 +321,31 @@ private fun NftDetailDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Art
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Brush.radialGradient(listOf(chainColor.copy(0.3f), chainColor.copy(0.1f)))),
+                        .background(Brush.radialGradient(listOf(chainColor.copy(0.3f), HuabuDeepPurple))),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🖼️", fontSize = 64.sp)
+                    if (nft.imageUrl.isNotBlank()) {
+                        AsyncImage(
+                            model = nft.imageUrl,
+                            contentDescription = nft.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
+                        )
+                    } else {
+                        Text("🖼️", fontSize = 64.sp)
+                    }
                 }
 
+                // Chain + price badges
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Box(
                         modifier = Modifier
@@ -304,7 +353,7 @@ private fun NftDetailDialog(
                             .background(chainColor.copy(0.2f))
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text(nft.chain.name, color = chainColor, fontWeight = FontWeight.Bold)
+                        Text(nft.chain.name, color = chainColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                     if (nft.priceEth > 0f) {
                         Box(
@@ -313,13 +362,50 @@ private fun NftDetailDialog(
                                 .background(chainColor.copy(0.2f))
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Text("${nft.priceEth} Ξ", color = chainColor, fontWeight = FontWeight.Bold)
+                            Text("Ξ${nft.priceEth}", color = chainColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+                    if (nft.lastSaleEth > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(HuabuCardBg2)
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("Last: Ξ${nft.lastSaleEth}", color = HuabuSilver, fontSize = 12.sp)
                         }
                     }
                 }
 
-                if (nft.lastSaleEth > 0f) {
-                    Text("Last sale: ${nft.lastSaleEth} Ξ", color = HuabuSilver, fontSize = 13.sp)
+                // View on marketplace button
+                if (nft.openseaUrl.isNotBlank()) {
+                    Button(
+                        onClick = {
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(nft.openseaUrl))) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = chainColor),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("View on Marketplace", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    // Fallback: search OpenSea
+                    OutlinedButton(
+                        onClick = {
+                            val q = Uri.encode("${nft.name} ${nft.collection}")
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://opensea.io/assets?search[query]=$q"))) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = chainColor)
+                    ) {
+                        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Search on OpenSea", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },
@@ -329,14 +415,14 @@ private fun NftDetailDialog(
                     onClick = onDelete,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
                     shape = RoundedCornerShape(20.dp)
-                ) { Text("Remove") }
+                ) { Text("Remove", color = Color.White) }
             } else {
                 TextButton(onClick = onDismiss) { Text("Close", color = HuabuSilver) }
             }
         },
         dismissButton = {
             if (isCurrentUser) {
-                TextButton(onClick = onDismiss) { Text("Cancel", color = HuabuSilver) }
+                TextButton(onClick = onDismiss) { Text("Close", color = HuabuSilver) }
             } else null
         }
     )
@@ -351,6 +437,7 @@ fun PollsWidget(
     polls: List<ProfilePoll>,
     isCurrentUser: Boolean,
     userId: String,
+    votedPollOptions: Map<String, Char> = emptyMap(),
     onCreatePoll: (ProfilePoll) -> Unit,
     onDeletePoll: (ProfilePoll) -> Unit,
     onVote: (pollId: String, option: Char) -> Unit
@@ -379,6 +466,7 @@ fun PollsWidget(
                         poll = poll,
                         isCurrentUser = isCurrentUser,
                         userId = userId,
+                        votedOption = votedPollOptions[poll.id],
                         onVote = onVote,
                         onDelete = { onDeletePoll(poll) }
                     )
@@ -403,10 +491,11 @@ private fun PollCard(
     poll: ProfilePoll,
     isCurrentUser: Boolean,
     userId: String,
+    votedOption: Char?,
     onVote: (String, Char) -> Unit,
     onDelete: () -> Unit
 ) {
-    var hasVoted by remember { mutableStateOf(false) } // In real app, check PollVote table
+    val hasVoted = votedOption != null
     val totalVotes = poll.totalVotes()
 
     Column(
@@ -428,6 +517,9 @@ private fun PollCard(
                 fontSize = 14.sp,
                 modifier = Modifier.weight(1f)
             )
+            if (hasVoted) {
+                Text("✓ Voted", color = HuabuGold, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
             if (isCurrentUser) {
                 IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
                     Icon(Icons.Filled.Close, contentDescription = "Delete", tint = HuabuSilver.copy(0.5f), modifier = Modifier.size(16.dp))
@@ -442,8 +534,8 @@ private fun PollCard(
             votes = poll.votesA,
             total = totalVotes,
             color = Color(0xFF8B5CF6),
-            isSelected = false,
-            onClick = { if (!hasVoted) { onVote(poll.id, 'A'); hasVoted = true } }
+            isSelected = votedOption == 'A',
+            onClick = { if (!hasVoted) onVote(poll.id, 'A') }
         )
 
         // Option B
@@ -453,8 +545,8 @@ private fun PollCard(
             votes = poll.votesB,
             total = totalVotes,
             color = Color(0xFFEC4899),
-            isSelected = false,
-            onClick = { if (!hasVoted) { onVote(poll.id, 'B'); hasVoted = true } }
+            isSelected = votedOption == 'B',
+            onClick = { if (!hasVoted) onVote(poll.id, 'B') }
         )
 
         // Option C (if provided)
@@ -465,8 +557,8 @@ private fun PollCard(
                 votes = poll.votesC,
                 total = totalVotes,
                 color = Color(0xFF06B6D4),
-                isSelected = false,
-                onClick = { if (!hasVoted) { onVote(poll.id, 'C'); hasVoted = true } }
+                isSelected = votedOption == 'C',
+                onClick = { if (!hasVoted) onVote(poll.id, 'C') }
             )
         }
 
@@ -478,8 +570,8 @@ private fun PollCard(
                 votes = poll.votesD,
                 total = totalVotes,
                 color = Color(0xFFEAB308),
-                isSelected = false,
-                onClick = { if (!hasVoted) { onVote(poll.id, 'D'); hasVoted = true } }
+                isSelected = votedOption == 'D',
+                onClick = { if (!hasVoted) onVote(poll.id, 'D') }
             )
         }
 
@@ -499,12 +591,15 @@ private fun PollOptionBar(
 ) {
     val animatedPercent by animateFloatAsState(targetValue = percent / 100f, label = "poll")
 
+    val borderMod = if (isSelected) Modifier.border(1.5.dp, color, RoundedCornerShape(8.dp)) else Modifier
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(36.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(HuabuSurface)
+            .background(if (isSelected) color.copy(0.08f) else HuabuSurface)
+            .then(borderMod)
             .clickable { onClick() }
     ) {
         // Progress fill
@@ -512,7 +607,7 @@ private fun PollOptionBar(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(animatedPercent)
-                .background(color.copy(0.3f))
+                .background(color.copy(if (isSelected) 0.4f else 0.3f))
         )
 
         // Content
@@ -523,7 +618,16 @@ private fun PollOptionBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(label, color = HuabuOnSurface, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                if (isSelected) {
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
+                }
+                Text(label, color = if (isSelected) color else HuabuOnSurface, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal)
+            }
             Text("${percent.toInt()}%", color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
     }

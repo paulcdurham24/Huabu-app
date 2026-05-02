@@ -1,8 +1,10 @@
 package com.huabu.app.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,16 +30,32 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun PostCard(
     post: Post,
+    currentUserId: String = "",
     onLike: () -> Unit = {},
     onComment: () -> Unit = {},
     onShare: () -> Unit = {},
+    onBookmark: (() -> Unit)? = null,
+    onReact: ((String) -> Unit)? = null,
+    isAuthorOnline: Boolean = false,
     onAuthorClick: () -> Unit = {},
+    onPostClick: () -> Unit = {},
+    onDelete: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null,
+    onPin: (() -> Unit)? = null,
+    isPinned: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    var isLiked by remember { mutableStateOf(post.isLiked) }
-    var likesCount by remember { mutableIntStateOf(post.likesCount) }
+    val initialLiked = if (currentUserId.isNotEmpty()) currentUserId in post.likedBy else post.isLiked
+    var isLiked by remember(post.id, currentUserId) { mutableStateOf(initialLiked) }
+    var likesCount by remember(post.id) { mutableIntStateOf(post.likesCount) }
+    var sharesCount by remember(post.id) { mutableIntStateOf(post.sharesCount) }
+    var isBookmarked by remember(post.id) { mutableStateOf(post.isBookmarked) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showReactionPicker by remember { mutableStateOf(false) }
+    val reactionEmojis = listOf("❤️", "😂", "😮", "😢", "🔥", "👏")
 
     Card(
         modifier = modifier
@@ -64,6 +82,10 @@ fun PostCard(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        modifier = Modifier.size(44.dp),
+                        contentAlignment = Alignment.BottomEnd
+                    ) {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
@@ -104,6 +126,15 @@ fun PostCard(
                             }
                         }
                     }
+                    if (isAuthorOnline) {
+                        Box(
+                            modifier = Modifier
+                                .size(11.dp)
+                                .background(HuabuNeonGreen, CircleShape)
+                                .border(2.dp, HuabuCardBg, CircleShape)
+                        )
+                    }
+                    }
 
                     Spacer(Modifier.width(10.dp))
 
@@ -136,6 +167,58 @@ fun PostCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = HuabuSilver
                     )
+
+                    if (onDelete != null || onEdit != null || onPin != null) {
+                        Box {
+                            IconButton(
+                                onClick = { showMenu = true },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.MoreVert,
+                                    contentDescription = "More",
+                                    tint = HuabuSilver,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showMenu,
+                                onDismissRequest = { showMenu = false }
+                            ) {
+                                if (onPin != null) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (isPinned) "Unpin" else "Pin to profile") },
+                                        onClick = { showMenu = false; onPin() },
+                                        leadingIcon = {
+                                            Icon(
+                                                if (isPinned) Icons.Filled.PushPin else Icons.Filled.PushPin,
+                                                contentDescription = null,
+                                                tint = if (isPinned) HuabuGold else HuabuSilver
+                                            )
+                                        }
+                                    )
+                                }
+                                if (onEdit != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("Edit") },
+                                        onClick = { showMenu = false; onEdit() },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.Edit, contentDescription = null)
+                                        }
+                                    )
+                                }
+                                if (onDelete != null) {
+                                    DropdownMenuItem(
+                                        text = { Text("Delete", color = HuabuError) },
+                                        onClick = { showMenu = false; onDelete() },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.Delete, contentDescription = null, tint = HuabuError)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 HorizontalDivider(color = HuabuDivider, thickness = 0.5.dp)
@@ -144,11 +227,18 @@ fun PostCard(
                 Text(
                     text = post.content,
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPostClick() }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     color = HuabuOnSurface
                 )
 
                 if (post.imageUrl.isNotEmpty()) {
+                    var showImageViewer by remember { mutableStateOf(false) }
+                    if (showImageViewer) {
+                        ZoomableImageViewer(imageUrl = post.imageUrl, onDismiss = { showImageViewer = false })
+                    }
                     AsyncImage(
                         model = post.imageUrl,
                         contentDescription = "Post image",
@@ -157,6 +247,7 @@ fun PostCard(
                             .fillMaxWidth()
                             .heightIn(max = 300.dp)
                             .clip(RoundedCornerShape(bottomStart = 0.dp, bottomEnd = 0.dp))
+                            .clickable { showImageViewer = true }
                     )
                 }
 
@@ -179,6 +270,72 @@ fun PostCard(
 
                 HorizontalDivider(color = HuabuDivider, thickness = 0.5.dp)
 
+                // Reaction summary row (only shown when reactions exist)
+                val totalReactions = post.reactions.values.sum()
+                if (totalReactions > 0) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        post.reactions.entries
+                            .filter { it.value > 0 }
+                            .sortedByDescending { it.value }
+                            .take(4)
+                            .forEach { (emoji, count) ->
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = HuabuCardBg2
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(emoji, fontSize = 12.sp)
+                                        Text("$count", color = HuabuSilver, fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                    }
+                }
+
+                // Emoji reaction picker popup
+                if (showReactionPicker) {
+                    Surface(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 2.dp)
+                            .fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        color = HuabuCardBg2,
+                        shadowElevation = 8.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            reactionEmojis.forEach { emoji ->
+                                val myReacted = currentUserId in (post.reactedBy[emoji] ?: emptyList())
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(if (myReacted) HuabuHotPink.copy(alpha = 0.25f) else Color.Transparent)
+                                        .clickable {
+                                            showReactionPicker = false
+                                            onReact?.invoke(emoji)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(emoji, fontSize = 20.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Actions
                 Row(
                     modifier = Modifier
@@ -190,7 +347,8 @@ fun PostCard(
                         icon = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                         count = likesCount,
                         tint = if (isLiked) HuabuHotPink else HuabuSilver,
-                        label = "Like"
+                        label = "Like",
+                        onLongClick = if (onReact != null) {{ showReactionPicker = !showReactionPicker }} else null
                     ) {
                         isLiked = !isLiked
                         likesCount = if (isLiked) likesCount + 1 else likesCount - 1
@@ -204,28 +362,43 @@ fun PostCard(
                     ) { onComment() }
                     PostAction(
                         icon = Icons.Filled.Share,
-                        count = post.sharesCount,
+                        count = sharesCount,
                         tint = HuabuNeonGreen,
                         label = "Share"
-                    ) { onShare() }
+                    ) { sharesCount++; onShare() }
+                    if (onBookmark != null) {
+                        IconButton(
+                            onClick = { isBookmarked = !isBookmarked; onBookmark() },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                                contentDescription = "Bookmark",
+                                tint = if (isBookmarked) HuabuGold else HuabuSilver,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PostAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     count: Int,
     tint: Color,
     label: String,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .clickable { onClick() }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)

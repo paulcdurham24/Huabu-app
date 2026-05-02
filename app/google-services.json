@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:213223803621:android:9b150c25eee35d9c86e20c",
+        "android_client_info": {
+          "package_name": "com.huabu.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZdW_nbJWNYAGoQeiDTGS9DjzUQ45bvms"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:213223803621:android:5ac9561d33cc9c6986e20c",
         "android_client_info": {
           "package_name": "com.huabu.app.debug"

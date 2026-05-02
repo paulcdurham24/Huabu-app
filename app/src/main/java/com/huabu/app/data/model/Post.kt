@@ -5,12 +5,12 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "posts")
 data class Post(
-    @PrimaryKey val id: String,
-    val authorId: String,
-    val authorName: String,
-    val authorUsername: String,
+    @PrimaryKey val id: String = "",
+    val authorId: String = "",
+    val authorName: String = "",
+    val authorUsername: String = "",
     val authorImageUrl: String = "",
-    val content: String,
+    val content: String = "",
     val imageUrl: String = "",
     val videoUrl: String = "",
     val likesCount: Int = 0,
@@ -20,5 +20,14 @@ data class Post(
     val createdAt: Long = System.currentTimeMillis(),
     val tags: String = "",
     val mood: String = "",
-    val backgroundColor: String = "#1A1A2E"
-)
+    val backgroundColor: String = "#1A1A2E",
+    val visibility: String = "public",
+    val isBookmarked: Boolean = false
+) {
+    @androidx.room.Ignore
+    var likedBy: List<String> = emptyList()
+    @androidx.room.Ignore
+    var reactions: Map<String, Int> = emptyMap()
+    @androidx.room.Ignore
+    var reactedBy: Map<String, List<String>> = emptyMap()
+}

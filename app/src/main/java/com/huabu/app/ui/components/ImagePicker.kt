@@ -1,9 +1,18 @@
 package com.huabu.app.ui.components
 
+import android.Manifest
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -43,19 +52,80 @@ fun ImagePickerButton(
         }
     }
 ) {
-    val photoPicker = rememberLauncherForActivityResult(
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    
+    // Helper to copy URI to cache
+    fun copyUriToCache(uri: Uri): Uri? {
+        return try {
+            android.util.Log.d("ImagePicker", "copyUriToCache: originalUri=$uri")
+            val inputStream = context.contentResolver.openInputStream(uri)
+            if (inputStream == null) {
+                android.util.Log.e("ImagePicker", "copyUriToCache: openInputStream returned null")
+                return null
+            }
+            val cacheDir = File(context.cacheDir, "image_picker")
+            cacheDir.mkdirs()
+            val file = File(cacheDir, "selected_${System.currentTimeMillis()}.jpg")
+            android.util.Log.d("ImagePicker", "copyUriToCache: copying to ${file.absolutePath}")
+            FileOutputStream(file).use { output ->
+                inputStream.copyTo(output)
+            }
+            inputStream.close()
+            val resultUri = Uri.fromFile(file)
+            android.util.Log.d("ImagePicker", "copyUriToCache: success, cachedUri=$resultUri, size=${file.length()} bytes")
+            resultUri
+        } catch (e: Exception) {
+            android.util.Log.e("ImagePicker", "copyUriToCache: failed", e)
+            null
+        }
+    }
+    
+    val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri ->
-            uri?.let { onImageSelected(it) }
+            android.util.Log.d("ImagePicker", "onResult: uri=$uri")
+            uri?.let { originalUri ->
+                scope.launch {
+                    // Copy to cache in background
+                    val cachedUri = withContext(Dispatchers.IO) {
+                        copyUriToCache(originalUri)
+                    }
+                    android.util.Log.d("ImagePicker", "onResult: cachedUri=$cachedUri")
+                    // Use cached URI for reliable upload
+                    cachedUri?.let { 
+                        android.util.Log.d("ImagePicker", "onResult: calling onImageSelected")
+                        onImageSelected(it) 
+                    } ?: run {
+                        android.util.Log.e("ImagePicker", "onResult: cachedUri is null, not calling onImageSelected")
+                    }
+                }
+            } ?: run {
+                android.util.Log.d("ImagePicker", "onResult: uri is null")
+            }
         }
     )
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted -> 
+            android.util.Log.d("ImagePicker", "permission result: granted=$granted")
+            if (granted) launcher.launch("image/*") 
+            else android.util.Log.e("ImagePicker", "permission denied")
+        }
+    )
+    fun openPicker() {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            Manifest.permission.READ_MEDIA_IMAGES
+        else
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        android.util.Log.d("ImagePicker", "openPicker: requesting permission $permission")
+        permissionLauncher.launch(permission)
+    }
 
     Box(
         modifier = modifier
             .clip(shape)
-            .clickable {
-                photoPicker.launch("image/*")
-            }
+            .clickable { openPicker() }
     ) {
         if (!currentImageUrl.isNullOrEmpty()) {
             AsyncImage(
@@ -168,22 +238,34 @@ fun PostImagePicker(
     onImageClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val photoPicker = rememberLauncherForActivityResult(
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri ->
-            uri?.let { onImageSelected(it) }
+            uri?.let {
+                try {
+                    ctx.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) { }
+                onImageSelected(it)
+            }
         }
     )
+    val permLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted -> if (granted) launcher.launch("image/*") }
+    )
+    fun pick() {
+        val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            Manifest.permission.READ_MEDIA_IMAGES
+        else Manifest.permission.READ_EXTERNAL_STORAGE
+        permLauncher.launch(perm)
+    }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .height(200.dp)
-            .clickable {
-                if (currentImageUri == null) {
-                    photoPicker.launch("image/*")
-                }
-            },
+            .clickable { if (currentImageUri == null) pick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = HuabuCardBg)
     ) {

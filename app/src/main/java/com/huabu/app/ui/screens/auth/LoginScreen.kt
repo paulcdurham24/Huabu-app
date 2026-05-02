@@ -215,7 +215,7 @@ fun LoginScreen(
                             .fillMaxWidth()
                             .height(50.dp),
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = HuabuHotPink)
+                        colors = ButtonDefaults.buttonColors(containerColor = HuabuHotPink, contentColor = Color.White)
                     ) {
                         if (loginState.isLoading) {
                             CircularProgressIndicator(
@@ -224,7 +224,7 @@ fun LoginScreen(
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text("Sign In", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Sign In", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
                         }
                     }
 

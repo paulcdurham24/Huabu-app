@@ -6,6 +6,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -17,14 +20,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.huabu.app.data.model.*
 import com.huabu.app.ui.theme.*
-import coil.compose.AsyncImage
 
 // ─────────────────────────────────────────────
 // CODE SNIPPETS WIDGET
@@ -357,7 +363,8 @@ fun TechStackWidget(
     items: List<TechStackItem>,
     isCurrentUser: Boolean,
     onAdd: (TechStackItem) -> Unit,
-    onDelete: (TechStackItem) -> Unit
+    onDelete: (TechStackItem) -> Unit,
+    onReorder: (TechStackItem, Boolean) -> Unit = { _, _ -> }
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
 
@@ -383,7 +390,8 @@ fun TechStackWidget(
                         category = category,
                         items = categoryItems,
                         isCurrentUser = isCurrentUser,
-                        onDelete = onDelete
+                        onDelete = onDelete,
+                        onReorder = onReorder
                     )
                 }
             }
@@ -406,7 +414,8 @@ private fun TechCategorySection(
     category: String,
     items: List<TechStackItem>,
     isCurrentUser: Boolean,
-    onDelete: (TechStackItem) -> Unit
+    onDelete: (TechStackItem) -> Unit,
+    onReorder: (TechStackItem, Boolean) -> Unit = { _, _ -> }
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
@@ -417,8 +426,16 @@ private fun TechCategorySection(
             letterSpacing = 1.sp
         )
 
-        items.forEach { item ->
-            TechItemRow(item = item, isCurrentUser = isCurrentUser, onDelete = { onDelete(item) })
+        items.forEachIndexed { index, item ->
+            TechItemRow(
+                item = item,
+                isCurrentUser = isCurrentUser,
+                canMoveUp = index > 0,
+                canMoveDown = index < items.size - 1,
+                onDelete = { onDelete(item) },
+                onMoveUp = { onReorder(item, true) },
+                onMoveDown = { onReorder(item, false) }
+            )
         }
     }
 }
@@ -427,7 +444,11 @@ private fun TechCategorySection(
 private fun TechItemRow(
     item: TechStackItem,
     isCurrentUser: Boolean,
-    onDelete: () -> Unit
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false,
+    onDelete: () -> Unit,
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {}
 ) {
     val animatedProgress by animateFloatAsState(targetValue = item.proficiency / 100f, label = "tech")
 
@@ -476,6 +497,14 @@ private fun TechItemRow(
         )
 
         if (isCurrentUser) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(18.dp)) {
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move up", tint = if (canMoveUp) HuabuSilver.copy(0.7f) else androidx.compose.ui.graphics.Color.Transparent, modifier = Modifier.size(14.dp))
+                }
+                IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(18.dp)) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move down", tint = if (canMoveDown) HuabuSilver.copy(0.7f) else androidx.compose.ui.graphics.Color.Transparent, modifier = Modifier.size(14.dp))
+                }
+            }
             IconButton(onClick = onDelete, modifier = Modifier.size(20.dp)) {
                 Icon(Icons.Filled.Close, contentDescription = "Remove", tint = HuabuSilver.copy(0.5f), modifier = Modifier.size(14.dp))
             }
@@ -660,7 +689,7 @@ private fun GifCard(
             .background(HuabuCardBg2)
             .clickable { onClick() }
     ) {
-        // GIF placeholder
+        // Animated GIF
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -671,15 +700,8 @@ private fun GifCard(
             AsyncImage(
                 model = if (gif.isLocal) "file://${gif.url}" else gif.url,
                 contentDescription = gif.title,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
-            )
-
-            // Play indicator
-            Icon(
-                Icons.Filled.PlayCircle,
-                contentDescription = "Play",
-                tint = Color.White.copy(0.8f),
-                modifier = Modifier.size(48.dp)
             )
         }
 
@@ -732,86 +754,235 @@ private fun GifCard(
 @Composable
 private fun AddGifDialog(
     onAdd: (GifItem) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    searchVm: GifSearchViewModel = hiltViewModel()
 ) {
-    var title by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("") }
+    val accent = Color(0xFFFF6B6B)
+    val searchState by searchVm.state.collectAsStateWithLifecycle()
+
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var query by remember { mutableStateOf("") }
+    var manualUrl by remember { mutableStateOf("") }
+    var manualTitle by remember { mutableStateOf("") }
     var caption by remember { mutableStateOf("") }
     var repeat by remember { mutableStateOf(true) }
+    var selectedGifUrl by remember { mutableStateOf("") }
+    var selectedGifTitle by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = HuabuCardBg,
-        title = { Text("🎬 Add GIF", color = Color(0xFFFF6B6B), fontWeight = FontWeight.ExtraBold) },
+        title = { Text("🎬 Add GIF", color = accent, fontWeight = FontWeight.ExtraBold) },
         text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = title, onValueChange = { title = it },
-                    label = { Text("Title", color = HuabuSilver) },
-                    singleLine = true,
-                    colors = snippetFieldColors(Color(0xFFFF6B6B)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = url, onValueChange = { url = it },
-                    label = { Text("GIF URL or local path", color = HuabuSilver) },
-                    singleLine = true,
-                    colors = snippetFieldColors(Color(0xFFFF6B6B)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = caption, onValueChange = { caption = it },
-                    label = { Text("Caption (optional)", color = HuabuSilver) },
-                    singleLine = true,
-                    colors = snippetFieldColors(Color(0xFFFF6B6B)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Repeat toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Tabs
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = HuabuCardBg2,
+                    contentColor = accent
                 ) {
-                    Text("Loop/repeat", color = HuabuSilver)
-                    Switch(
-                        checked = repeat,
-                        onCheckedChange = { repeat = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFFFF6B6B),
-                            checkedTrackColor = Color(0xFFFF6B6B).copy(0.5f)
-                        )
+                    Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 },
+                        text = { Text("Search Giphy", fontSize = 12.sp) })
+                    Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 },
+                        text = { Text("Paste URL", fontSize = 12.sp) })
+                }
+
+                if (selectedTab == 0) {
+                    // Search box
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = {
+                            query = it
+                            searchVm.search(it)
+                        },
+                        label = { Text("Search Giphy…", color = HuabuSilver) },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (searchState.isLoading)
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = accent)
+                            else if (query.isNotEmpty())
+                                IconButton(onClick = { query = ""; searchVm.loadTrending() }) {
+                                    Icon(Icons.Filled.Clear, contentDescription = null, tint = HuabuSilver, modifier = Modifier.size(16.dp))
+                                }
+                        },
+                        colors = snippetFieldColors(accent),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
                     )
+
+                    // Selection preview
+                    if (selectedGifUrl.isNotBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(accent.copy(0.12f))
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AsyncImage(
+                                model = selectedGifUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(6.dp))
+                            )
+                            Text(
+                                "Selected: $selectedGifTitle",
+                                color = accent,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { selectedGifUrl = ""; selectedGifTitle = "" }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Filled.Close, contentDescription = null, tint = HuabuSilver, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+
+                    // Error state
+                    if (searchState.error != null) {
+                        Text("Could not load GIFs. Check your connection.", color = Color(0xFFDC2626), fontSize = 12.sp)
+                    }
+
+                    // GIF grid
+                    if (searchState.results.isNotEmpty()) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(240.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            items(searchState.results) { result ->
+                                val isSelected = selectedGifUrl == result.gifUrl
+                                Box(
+                                    modifier = Modifier
+                                        .aspectRatio(1f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .border(
+                                            width = if (isSelected) 2.dp else 0.dp,
+                                            color = if (isSelected) accent else Color.Transparent,
+                                            shape = RoundedCornerShape(6.dp)
+                                        )
+                                        .clickable {
+                                            selectedGifUrl = result.gifUrl
+                                            selectedGifTitle = result.title.ifBlank { query.ifBlank { "GIF" } }
+                                        }
+                                ) {
+                                    AsyncImage(
+                                        model = result.previewUrl,
+                                        contentDescription = result.title,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    if (isSelected) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize().background(accent.copy(0.25f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Caption + repeat for search tab
+                    if (selectedGifUrl.isNotBlank()) {
+                        OutlinedTextField(
+                            value = caption, onValueChange = { caption = it },
+                            label = { Text("Caption (optional)", color = HuabuSilver) },
+                            singleLine = true,
+                            colors = snippetFieldColors(accent),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Loop/repeat", color = HuabuSilver, fontSize = 13.sp)
+                            Switch(checked = repeat, onCheckedChange = { repeat = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = accent, checkedTrackColor = accent.copy(0.5f)))
+                        }
+                    }
+                } else {
+                    // Manual URL tab
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = manualTitle, onValueChange = { manualTitle = it },
+                            label = { Text("Title", color = HuabuSilver) },
+                            singleLine = true,
+                            colors = snippetFieldColors(accent),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = manualUrl, onValueChange = { manualUrl = it },
+                            label = { Text("GIF URL or local path", color = HuabuSilver) },
+                            singleLine = true,
+                            colors = snippetFieldColors(accent),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = caption, onValueChange = { caption = it },
+                            label = { Text("Caption (optional)", color = HuabuSilver) },
+                            singleLine = true,
+                            colors = snippetFieldColors(accent),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Loop/repeat", color = HuabuSilver, fontSize = 13.sp)
+                            Switch(checked = repeat, onCheckedChange = { repeat = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = accent, checkedTrackColor = accent.copy(0.5f)))
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
+            val canAdd = if (selectedTab == 0) selectedGifUrl.isNotBlank()
+                         else manualTitle.isNotBlank() && manualUrl.isNotBlank()
             Button(
                 onClick = {
-                    if (title.isNotBlank() && url.isNotBlank()) {
+                    if (selectedTab == 0 && selectedGifUrl.isNotBlank()) {
                         onAdd(GifItem(
                             id = "gif_${System.currentTimeMillis()}",
                             userId = "",
-                            title = title.trim(),
-                            url = url.trim(),
-                            isLocal = !url.startsWith("http"),
+                            title = selectedGifTitle,
+                            url = selectedGifUrl,
+                            isLocal = false,
+                            repeat = repeat,
+                            caption = caption.trim()
+                        ))
+                    } else if (selectedTab == 1 && manualTitle.isNotBlank() && manualUrl.isNotBlank()) {
+                        onAdd(GifItem(
+                            id = "gif_${System.currentTimeMillis()}",
+                            userId = "",
+                            title = manualTitle.trim(),
+                            url = manualUrl.trim(),
+                            isLocal = !manualUrl.startsWith("http"),
                             repeat = repeat,
                             caption = caption.trim()
                         ))
                     }
                 },
-                enabled = title.isNotBlank() && url.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6B6B)),
+                enabled = canAdd,
+                colors = ButtonDefaults.buttonColors(containerColor = accent),
                 shape = RoundedCornerShape(20.dp)
-            ) { Text("Add") }
+            ) { Text("Add", color = Color.White) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = HuabuSilver) } }
     )

@@ -58,18 +58,26 @@ class EditProfileViewModel @Inject constructor(
     fun updateAvatar(userId: String, imageUri: Uri) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(avatarUploadProgress = 0f)
+            android.util.Log.d("EditProfile", "updateAvatar called with uri: $imageUri")
 
             val result = imageRepository.updateProfilePicture(userId, imageUri)
+            android.util.Log.d("EditProfile", "upload result: $result")
             result.fold(
                 onSuccess = { downloadUrl ->
+                    android.util.Log.d("EditProfile", "upload success: $downloadUrl")
                     _uiState.value = _uiState.value.copy(
                         user = _uiState.value.user?.copy(profileImageUrl = downloadUrl),
                         avatarUploadProgress = 1f
                     )
                 },
                 onFailure = { error ->
+                    android.util.Log.e("EditProfile", "upload failed: ${error.message}", error)
+                    val msg = when {
+                        error.message?.contains("404") == true -> "Storage not configured. Please enable Firebase Storage in console."
+                        else -> "Failed to upload avatar: ${error.message}"
+                    }
                     _uiState.value = _uiState.value.copy(
-                        errorMessage = "Failed to upload avatar: ${error.message}",
+                        errorMessage = msg,
                         avatarUploadProgress = 0f
                     )
                 }

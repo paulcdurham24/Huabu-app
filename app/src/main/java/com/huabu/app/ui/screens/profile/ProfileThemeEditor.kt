@@ -165,6 +165,7 @@ fun ProfileThemeEditor(
     onBack: () -> Unit
 ) {
     var theme by remember { mutableStateOf(initialTheme) }
+    LaunchedEffect(initialTheme) { if (initialTheme.userId.isNotEmpty()) theme = initialTheme }
 
     Scaffold(
         topBar = {

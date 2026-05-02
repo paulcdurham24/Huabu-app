@@ -24,7 +24,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.huabu.app.data.model.User
+import com.huabu.app.ui.components.CoverImagePicker
 import com.huabu.app.ui.components.ProfileImagePicker
 import com.huabu.app.ui.theme.*
 
@@ -37,28 +40,55 @@ fun EditProfileScreen(
     viewModel: EditProfileViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    var displayName     by remember { mutableStateOf(user.displayName) }
-    var username        by remember { mutableStateOf(user.username) }
-    var bio             by remember { mutableStateOf(user.bio) }
-    var location        by remember { mutableStateOf(user.location) }
-    var website         by remember { mutableStateOf(user.website) }
-    var mood            by remember { mutableStateOf(user.mood) }
-    var aboutMe         by remember { mutableStateOf(user.aboutMe) }
-    var heroesSection   by remember { mutableStateOf(user.heroesSection) }
-    var interests       by remember { mutableStateOf(user.interests) }
-    var profileSong     by remember { mutableStateOf(user.profileSong) }
+    // Load fresh user data from Firestore on entry
+    LaunchedEffect(user.id) { viewModel.loadUser(user.id) }
+
+    // Source of truth for text fields — initialise from param, refresh if ViewModel loads newer data
+    var displayName       by remember { mutableStateOf(user.displayName) }
+    var username          by remember { mutableStateOf(user.username) }
+    var bio               by remember { mutableStateOf(user.bio) }
+    var location          by remember { mutableStateOf(user.location) }
+    var website           by remember { mutableStateOf(user.website) }
+    var mood              by remember { mutableStateOf(user.mood) }
+    var aboutMe           by remember { mutableStateOf(user.aboutMe) }
+    var heroesSection     by remember { mutableStateOf(user.heroesSection) }
+    var interests         by remember { mutableStateOf(user.interests) }
+    var profileSong       by remember { mutableStateOf(user.profileSong) }
     var profileSongArtist by remember { mutableStateOf(user.profileSongArtist) }
 
     var nameError by remember { mutableStateOf(false) }
 
-    // Track avatar URL from ViewModel updates
+    // Avatar / background URLs — kept live from ViewModel
     var currentAvatarUrl by remember { mutableStateOf(user.profileImageUrl) }
+    var currentBgUrl     by remember { mutableStateOf(user.backgroundImageUrl) }
 
-    // Update avatar URL when ViewModel updates
     LaunchedEffect(uiState.user) {
-        uiState.user?.let {
-            currentAvatarUrl = it.profileImageUrl
+        uiState.user?.let { fresh ->
+            currentAvatarUrl = fresh.profileImageUrl
+            currentBgUrl     = fresh.backgroundImageUrl
+            // Refresh text fields only when first loaded (user was null before)
+            if (displayName == user.displayName && fresh.displayName != user.displayName) {
+                displayName       = fresh.displayName
+                username          = fresh.username
+                bio               = fresh.bio
+                location          = fresh.location
+                website           = fresh.website
+                mood              = fresh.mood
+                aboutMe           = fresh.aboutMe
+                heroesSection     = fresh.heroesSection
+                interests         = fresh.interests
+                profileSong       = fresh.profileSong
+                profileSongArtist = fresh.profileSongArtist
+            }
+        }
+    }
+
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
         }
     }
 
@@ -66,11 +96,29 @@ fun EditProfileScreen(
     LaunchedEffect(uiState.saveSuccess) {
         if (uiState.saveSuccess) {
             viewModel.onSaveComplete()
-            onSave(uiState.user ?: user)
+            snackbarHostState.showSnackbar("Profile saved!")
+            // Build the updated User by merging current field values with uploaded URLs
+            val saved = (uiState.user ?: user).copy(
+                displayName       = displayName.trim(),
+                username          = username.trim().lowercase().replace(" ", "_"),
+                bio               = bio.trim(),
+                location          = location.trim(),
+                website           = website.trim(),
+                mood              = mood.trim(),
+                aboutMe           = aboutMe.trim(),
+                heroesSection     = heroesSection.trim(),
+                interests         = interests.trim(),
+                profileSong       = profileSong.trim(),
+                profileSongArtist = profileSongArtist.trim(),
+                profileImageUrl   = currentAvatarUrl,
+                backgroundImageUrl = currentBgUrl
+            )
+            onSave(saved)
         }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Edit Profile", color = HuabuGold, fontWeight = FontWeight.ExtraBold) },
@@ -86,17 +134,19 @@ fun EditProfileScreen(
                             viewModel.saveProfile(
                                 user.id,
                                 mapOf(
-                                    "displayName" to displayName.trim(),
-                                    "username" to username.trim().lowercase().replace(" ", "_"),
-                                    "bio" to bio.trim(),
-                                    "location" to location.trim(),
-                                    "website" to website.trim(),
-                                    "mood" to mood.trim(),
-                                    "aboutMe" to aboutMe.trim(),
-                                    "heroesSection" to heroesSection.trim(),
-                                    "interests" to interests.trim(),
-                                    "profileSong" to profileSong.trim(),
-                                    "profileSongArtist" to profileSongArtist.trim()
+                                    "displayName"       to displayName.trim(),
+                                    "username"          to username.trim().lowercase().replace(" ", "_"),
+                                    "bio"               to bio.trim(),
+                                    "location"          to location.trim(),
+                                    "website"           to website.trim(),
+                                    "mood"              to mood.trim(),
+                                    "aboutMe"           to aboutMe.trim(),
+                                    "heroesSection"     to heroesSection.trim(),
+                                    "interests"         to interests.trim(),
+                                    "profileSong"       to profileSong.trim(),
+                                    "profileSongArtist" to profileSongArtist.trim(),
+                                    "profileImageUrl"   to currentAvatarUrl,
+                                    "backgroundImageUrl" to currentBgUrl
                                 )
                             )
                         },
@@ -129,6 +179,25 @@ fun EditProfileScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Background image
+            item {
+                Column {
+                    Text("Cover Photo", style = MaterialTheme.typography.labelSmall, color = HuabuSilver, modifier = Modifier.padding(bottom = 6.dp))
+                    CoverImagePicker(
+                        currentImageUrl = currentBgUrl.takeIf { it.isNotEmpty() },
+                        onImageSelected = { uri -> viewModel.updateBackground(user.id, uri) },
+                        height = 140
+                    )
+                    if (uiState.backgroundUploadProgress in 0.01f..0.99f) {
+                        LinearProgressIndicator(
+                            progress = { uiState.backgroundUploadProgress },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            color = HuabuElectricBlue
+                        )
+                    }
+                }
+            }
+
             // Avatar with Firebase Storage upload
             item {
                 Box(
@@ -137,20 +206,14 @@ fun EditProfileScreen(
                 ) {
                     ProfileImagePicker(
                         currentImageUrl = currentAvatarUrl.takeIf { it.isNotEmpty() },
-                        onImageSelected = { uri ->
-                            viewModel.updateAvatar(user.id, uri)
-                        },
+                        onImageSelected = { uri -> viewModel.updateAvatar(user.id, uri) },
                         size = 120
                     )
                 }
-
-                // Upload progress indicator
                 if (uiState.avatarUploadProgress in 0.01f..0.99f) {
                     LinearProgressIndicator(
                         progress = { uiState.avatarUploadProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 64.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 64.dp),
                         color = HuabuHotPink
                     )
                 }

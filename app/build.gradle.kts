@@ -5,20 +5,39 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics.plugin)
 }
 
 android {
     namespace = "com.huabu.app"
     compileSdk = 35
 
+    signingConfigs {
+        create("release") {
+            val localPropsFile = rootProject.file("local.properties")
+            if (localPropsFile.exists()) {
+                val props = org.jetbrains.kotlin.konan.properties.loadProperties(localPropsFile.path)
+                val ksPath = props["KEYSTORE_PATH"] as? String
+                storeFile     = if (ksPath != null) file(ksPath) else null
+                storePassword = props["KEYSTORE_PASSWORD"] as? String ?: ""
+                keyAlias      = props["KEY_ALIAS"] as? String ?: ""
+                keyPassword   = props["KEY_PASSWORD"] as? String ?: ""
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.huabu.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 9       // increment by 1 for every Play Store upload
+        versionName = "1.8.0" // shown to users on the Play Store listing
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val localProps = org.jetbrains.kotlin.konan.properties.loadProperties(rootProject.file("local.properties").path)
+        buildConfigField("String", "YOUTUBE_API_KEY", "\"${localProps["YOUTUBE_API_KEY"] ?: ""}\"")
+        buildConfigField("String", "GIPHY_API_KEY", "\"${localProps["GIPHY_API_KEY"] ?: ""}\"") 
 
         vectorDrawables {
             useSupportLibrary = true
@@ -34,6 +53,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -110,6 +130,7 @@ dependencies {
     implementation(libs.okhttp.logging)
 
     implementation(libs.coil.compose)
+    implementation(libs.coil.gif)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.gson)
 
@@ -119,6 +140,7 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.storage)
     implementation(libs.firebase.messaging)
+    implementation(libs.firebase.crashlytics)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

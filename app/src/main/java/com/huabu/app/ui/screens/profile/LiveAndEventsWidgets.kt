@@ -41,7 +41,8 @@ fun GoLiveWidget(
     liveStream: LiveStream,
     isCurrentUser: Boolean,
     onGoLive: (String) -> Unit,
-    onEndLive: () -> Unit
+    onEndLive: () -> Unit,
+    onWatch: () -> Unit = {}
 ) {
     val pulseAnim = rememberInfiniteTransition(label = "pulse")
     val pulse by pulseAnim.animateFloat(
@@ -108,7 +109,7 @@ fun GoLiveWidget(
                         }
                     } else {
                         Button(
-                            onClick = {},
+                            onClick = onWatch,
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
                             modifier = Modifier.height(34.dp)
@@ -129,12 +130,13 @@ fun GoLiveWidget(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFEF4444)
+                    containerColor = Color(0xFFEF4444),
+                    contentColor = Color.White
                 )
             ) {
-                Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
                 Spacer(Modifier.width(8.dp))
-                Text("Go Live", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text("Go Live", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
             }
 
             if (showDialog) {
@@ -203,12 +205,15 @@ private fun GoLiveDialog(onStart: (String) -> Unit, onDismiss: () -> Unit) {
         confirmButton = {
             Button(
                 onClick = { onStart(title) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFEF4444),
+                    contentColor = Color.White
+                ),
                 shape = RoundedCornerShape(20.dp)
             ) {
-                Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
                 Spacer(Modifier.width(4.dp))
-                Text("Go Live")
+                Text("Go Live", color = Color.White)
             }
         },
         dismissButton = {

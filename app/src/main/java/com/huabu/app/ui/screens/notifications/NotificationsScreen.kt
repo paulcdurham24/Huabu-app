@@ -20,40 +20,33 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.huabu.app.data.model.Notification
 import com.huabu.app.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
-
-enum class NotificationType { LIKE, COMMENT, FOLLOW, MENTION, SYSTEM, GAME_INVITE }
-
-data class Notification(
-    val id: String,
-    val type: NotificationType,
-    val title: String,
-    val message: String,
-    val fromUserId: String? = null,
-    val fromUserName: String? = null,
-    val timestamp: Long,
-    val isRead: Boolean = false
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
     onBack: () -> Unit,
-    onNavigateToProfile: (String) -> Unit
+    onNavigateToProfile: (String) -> Unit,
+    onNavigateToPost: (String) -> Unit = {},
+    onNavigateToChat: (String) -> Unit = {},
+    viewModel: NotificationsViewModel = hiltViewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     var selectedFilter by remember { mutableStateOf("All") }
     val filters = listOf("All", "Likes", "Comments", "Follows", "System")
 
-    val notifications = remember { generateMockNotifications() }
-    val unreadCount = notifications.count { !it.isRead }
+    val notifications = uiState.notifications
+    val unreadCount = notifications.count { !it.read }
 
     val filtered = when (selectedFilter) {
-        "Likes" -> notifications.filter { it.type == NotificationType.LIKE }
-        "Comments" -> notifications.filter { it.type == NotificationType.COMMENT }
-        "Follows" -> notifications.filter { it.type == NotificationType.FOLLOW }
-        "System" -> notifications.filter { it.type == NotificationType.SYSTEM }
+        "Likes"    -> notifications.filter { it.type == "like" }
+        "Comments" -> notifications.filter { it.type == "comment" }
+        "Follows"  -> notifications.filter { it.type == "follow" || it.type == "friend_request" }
+        "System"   -> notifications.filter { it.type == "system" }
         else -> notifications
     }
 
@@ -88,7 +81,7 @@ fun NotificationsScreen(
                         }
                     },
                     actions = {
-                        TextButton(onClick = { /* Mark all read */ }) {
+                        TextButton(onClick = { viewModel.markAllRead() }) {
                             Text("Mark all read", color = HuabuHotPink, fontSize = 12.sp)
                         }
                     },
@@ -131,12 +124,39 @@ fun NotificationsScreen(
                 .padding(padding),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
+            if (uiState.isLoading) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = HuabuElectricBlue)
+                    }
+                }
+            } else if (filtered.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                        Text("No notifications yet", color = HuabuSilver)
+                    }
+                }
+            }
             items(filtered, key = { it.id }) { notification ->
                 NotificationItem(
                     notification = notification,
                     onClick = {
-                        if (notification.fromUserId != null) {
-                            onNavigateToProfile(notification.fromUserId)
+                        viewModel.markRead(notification.id)
+                        when (notification.type) {
+                            "message" -> {
+                                if (notification.targetId.isNotEmpty()) onNavigateToChat(notification.targetId)
+                                else if (notification.senderId.isNotEmpty()) onNavigateToProfile(notification.senderId)
+                            }
+                            "like", "comment" -> {
+                                if (notification.targetId.isNotEmpty()) onNavigateToPost(notification.targetId)
+                                else if (notification.senderId.isNotEmpty()) onNavigateToProfile(notification.senderId)
+                            }
+                            "friend_request", "follow" -> {
+                                if (notification.senderId.isNotEmpty()) onNavigateToProfile(notification.senderId)
+                            }
+                            else -> {
+                                if (notification.senderId.isNotEmpty()) onNavigateToProfile(notification.senderId)
+                            }
                         }
                     }
                 )
@@ -156,19 +176,21 @@ private fun NotificationItem(
     onClick: () -> Unit
 ) {
     val icon = when (notification.type) {
-        NotificationType.LIKE -> Icons.Filled.Favorite to HuabuHotPink
-        NotificationType.COMMENT -> Icons.Filled.Comment to HuabuElectricBlue
-        NotificationType.FOLLOW -> Icons.Filled.PersonAdd to HuabuNeonGreen
-        NotificationType.MENTION -> Icons.Filled.AlternateEmail to HuabuGold
-        NotificationType.GAME_INVITE -> Icons.Filled.VideogameAsset to HuabuViolet
-        NotificationType.SYSTEM -> Icons.Filled.Info to HuabuSilver
+        "like"           -> Icons.Filled.Favorite to HuabuHotPink
+        "comment"        -> Icons.Filled.Comment to HuabuElectricBlue
+        "follow",
+        "friend_request" -> Icons.Filled.PersonAdd to HuabuNeonGreen
+        "mention"        -> Icons.Filled.AlternateEmail to HuabuGold
+        "game_invite"    -> Icons.Filled.VideogameAsset to HuabuViolet
+        "message"        -> Icons.Filled.Message to HuabuAccentCyan
+        else             -> Icons.Filled.Info to HuabuSilver
     }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .background(if (notification.isRead) Color.Transparent else HuabuCardBg.copy(alpha = 0.5f))
+            .background(if (notification.read) Color.Transparent else HuabuCardBg.copy(alpha = 0.5f))
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -194,13 +216,13 @@ private fun NotificationItem(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = notification.title,
-                color = if (notification.isRead) HuabuSilver else HuabuOnSurface,
-                fontWeight = if (notification.isRead) FontWeight.Normal else FontWeight.Bold,
+                color = if (notification.read) HuabuSilver else HuabuOnSurface,
+                fontWeight = if (notification.read) FontWeight.Normal else FontWeight.Bold,
                 fontSize = 14.sp
             )
             Text(
                 text = notification.message,
-                color = if (notification.isRead) HuabuSilver.copy(0.7f) else HuabuSilver,
+                color = if (notification.read) HuabuSilver.copy(0.7f) else HuabuSilver,
                 fontSize = 12.sp,
                 maxLines = 2
             )
@@ -211,10 +233,10 @@ private fun NotificationItem(
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = formatTimestamp(notification.timestamp),
-                color = if (notification.isRead) HuabuSilver.copy(0.5f) else HuabuHotPink,
+                color = if (notification.read) HuabuSilver.copy(0.5f) else HuabuHotPink,
                 fontSize = 11.sp
             )
-            if (!notification.isRead) {
+            if (!notification.read) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Box(
                     modifier = Modifier
@@ -237,63 +259,3 @@ private fun formatTimestamp(ts: Long): String {
     }
 }
 
-private fun generateMockNotifications(): List<Notification> = listOf(
-    Notification(
-        id = "n1",
-        type = NotificationType.LIKE,
-        title = "Xena Starfire liked your post",
-        message = "They liked: \"Just customized my Huabu page...\"",
-        fromUserId = "u1",
-        fromUserName = "Xena Starfire",
-        timestamp = System.currentTimeMillis() - 300_000,
-        isRead = false
-    ),
-    Notification(
-        id = "n2",
-        type = NotificationType.COMMENT,
-        title = "DJ Phantom commented",
-        message = "\"This is fire! 🔥 Check out my new mix too\"",
-        fromUserId = "u2",
-        fromUserName = "DJ Phantom",
-        timestamp = System.currentTimeMillis() - 3_600_000,
-        isRead = false
-    ),
-    Notification(
-        id = "n3",
-        type = NotificationType.FOLLOW,
-        title = "Luna Eclipse followed you",
-        message = "They added you to their friends!",
-        fromUserId = "u3",
-        fromUserName = "Luna Eclipse",
-        timestamp = System.currentTimeMillis() - 7_200_000,
-        isRead = true
-    ),
-    Notification(
-        id = "n4",
-        type = NotificationType.GAME_INVITE,
-        title = "Game invitation",
-        message = "Retro Kid challenged you to Tic Tac Toe!",
-        fromUserId = "u4",
-        fromUserName = "Retro Kid",
-        timestamp = System.currentTimeMillis() - 14_400_000,
-        isRead = false
-    ),
-    Notification(
-        id = "n5",
-        type = NotificationType.MENTION,
-        title = "Glitter Queen mentioned you",
-        message = "\"Thanks @you for the comment on my page!! ✨\"",
-        fromUserId = "u5",
-        fromUserName = "Glitter Queen",
-        timestamp = System.currentTimeMillis() - 86_400_000,
-        isRead = true
-    ),
-    Notification(
-        id = "n6",
-        type = NotificationType.SYSTEM,
-        title = "Welcome to Huabu!",
-        message = "Complete your profile to get started. Add a photo, bio, and profile song!",
-        timestamp = System.currentTimeMillis() - 259_200_000,
-        isRead = true
-    )
-)

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.huabu.app.data.model.ProfileTheme
 import com.huabu.app.ui.navigation.Screen
 import com.huabu.app.ui.theme.*
 
@@ -35,14 +37,32 @@ data class NavItem(
 @Composable
 fun HuabuBottomNav(
     navController: NavHostController,
-    currentRoute: String?
+    currentRoute: String?,
+    unreadNotifCount: Int = 0,
+    unreadMsgCount: Int = 0,
+    theme: ProfileTheme? = null
 ) {
+    val accentColor = remember(theme?.primaryColor) {
+        theme?.primaryColor?.let {
+            runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull()
+        } ?: HuabuHotPink
+    }
+    val navBgColor1 = remember(theme?.cardColor) {
+        theme?.cardColor?.let {
+            runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull()
+        } ?: HuabuDeepPurple
+    }
+    val navBgColor2 = remember(theme?.cardColor) {
+        theme?.cardColor?.let {
+            runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull()?.copy(alpha = 0.85f)
+        } ?: HuabuSurface
+    }
     val navItems = listOf(
         NavItem("Home", Icons.Filled.Home, Screen.Feed.route),
         NavItem("Friends", Icons.Filled.People, Screen.Friends.route),
-        NavItem("Messages", Icons.Filled.Email, Screen.Messages.route),
+        NavItem("Messages", Icons.Filled.Email, Screen.Messages.route, badgeCount = unreadMsgCount),
         NavItem("Search", Icons.Filled.Search, Screen.Search.route),
-        NavItem("Me", Icons.Filled.AccountCircle, Screen.Profile.createRoute("me"))
+        NavItem("Me", Icons.Filled.AccountCircle, Screen.Profile.createRoute("me"), badgeCount = unreadNotifCount)
     )
 
     Box(
@@ -50,13 +70,13 @@ fun HuabuBottomNav(
             .fillMaxWidth()
             .background(
                 brush = Brush.horizontalGradient(
-                    colors = listOf(HuabuDeepPurple, HuabuCardBg, HuabuSurface)
+                    colors = listOf(navBgColor1, navBgColor2, navBgColor1)
                 )
             )
             .border(
                 width = 1.dp,
                 brush = Brush.horizontalGradient(
-                    colors = listOf(HuabuHotPink, HuabuElectricBlue, HuabuHotPink)
+                    colors = listOf(accentColor, accentColor.copy(alpha = 0.5f), accentColor)
                 ),
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
             )
@@ -73,7 +93,7 @@ fun HuabuBottomNav(
                 val isSelected = currentRoute == item.route ||
                     (item.route == "profile/me" && currentRoute == "profile/me")
                 val iconColor by animateColorAsState(
-                    targetValue = if (isSelected) HuabuHotPink else HuabuSilver,
+                    targetValue = if (isSelected) accentColor else HuabuSilver,
                     animationSpec = tween(300),
                     label = "nav_color"
                 )
@@ -126,7 +146,7 @@ fun HuabuBottomNav(
                                 .height(2.dp)
                                 .background(
                                     brush = Brush.horizontalGradient(
-                                        listOf(HuabuHotPink, HuabuElectricBlue)
+                                        listOf(accentColor, accentColor.copy(alpha = 0.5f))
                                     ),
                                     shape = RoundedCornerShape(1.dp)
                                 )

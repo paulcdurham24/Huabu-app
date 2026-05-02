@@ -85,6 +85,17 @@ class StorageService @Inject constructor() {
         return uploadImage(uri, path)
     }
 
+    // Upload voice message
+    suspend fun uploadVoiceMessage(conversationId: String, file: java.io.File): Result<String> = try {
+        val path = "messages/$conversationId/voice_${UUID.randomUUID()}.m4a"
+        val ref = storage.reference.child(path)
+        ref.putFile(android.net.Uri.fromFile(file)).await()
+        val url = ref.downloadUrl.await().toString()
+        Result.success(url)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     // Delete image
     suspend fun deleteImage(imageUrl: String): Result<Unit> = try {
         val ref = storage.getReferenceFromUrl(imageUrl)

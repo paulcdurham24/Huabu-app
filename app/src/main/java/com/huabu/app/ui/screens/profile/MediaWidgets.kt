@@ -1,5 +1,7 @@
 package com.huabu.app.ui.screens.profile
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +69,7 @@ private fun RecentTrackRow(
     isPlaying: Boolean,
     onPlayPause: () -> Unit
 ) {
+    val context = LocalContext.current
     val pulse = rememberInfiniteTransition(label = "pulse")
     val scale by pulse.animateFloat(
         initialValue = 1f, targetValue = 1.12f,
@@ -111,15 +115,18 @@ private fun RecentTrackRow(
             )
         }
 
-        // Play/pause
+        // Play button → opens YouTube Music search
         IconButton(
-            onClick = onPlayPause,
+            onClick = {
+                val query = Uri.encode("${track.title} ${track.artist}")
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=$query"))) }
+            },
             modifier = Modifier.size(32.dp)
         ) {
             Icon(
-                if (isPlaying) Icons.Filled.PauseCircle else Icons.Filled.PlayCircle,
-                contentDescription = null,
-                tint = if (isPlaying) HuabuViolet else HuabuSilver,
+                Icons.Filled.PlayCircle,
+                contentDescription = "Play on YouTube Music",
+                tint = HuabuViolet,
                 modifier = Modifier.size(28.dp)
             )
         }
@@ -135,7 +142,8 @@ fun MyPlaylistWidget(
     items: List<PlaylistItem>,
     isCurrentUser: Boolean,
     onAdd: (PlaylistItem) -> Unit,
-    onDelete: (PlaylistItem) -> Unit
+    onDelete: (PlaylistItem) -> Unit,
+    onReorder: (PlaylistItem, Boolean) -> Unit = { _, _ -> }
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var nowPlayingId  by remember { mutableStateOf<String?>(null) }
@@ -164,8 +172,12 @@ fun MyPlaylistWidget(
                         index = index + 1,
                         isPlaying = isPlaying,
                         isCurrentUser = isCurrentUser,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < items.size - 1,
                         onPlayPause = { nowPlayingId = if (isPlaying) null else item.id },
-                        onDelete = { onDelete(item) }
+                        onDelete = { onDelete(item) },
+                        onMoveUp = { onReorder(item, true) },
+                        onMoveDown = { onReorder(item, false) }
                     )
                 }
             }
@@ -190,9 +202,14 @@ private fun PlaylistRow(
     index: Int,
     isPlaying: Boolean,
     isCurrentUser: Boolean,
+    canMoveUp: Boolean = false,
+    canMoveDown: Boolean = false,
     onPlayPause: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onMoveUp: () -> Unit = {},
+    onMoveDown: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -243,16 +260,30 @@ private fun PlaylistRow(
             )
         }
 
-        IconButton(onClick = onPlayPause, modifier = Modifier.size(28.dp)) {
+        IconButton(
+            onClick = {
+                val query = Uri.encode("${item.title} ${item.artist}")
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=$query"))) }
+            },
+            modifier = Modifier.size(28.dp)
+        ) {
             Icon(
-                if (isPlaying) Icons.Filled.PauseCircle else Icons.Filled.PlayCircle,
-                contentDescription = null,
-                tint = if (isPlaying) HuabuAccentCyan else HuabuSilver,
+                Icons.Filled.PlayCircle,
+                contentDescription = "Play on YouTube Music",
+                tint = HuabuAccentCyan,
                 modifier = Modifier.size(24.dp)
             )
         }
 
         if (isCurrentUser) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onMoveUp, enabled = canMoveUp, modifier = Modifier.size(22.dp)) {
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move up", tint = if (canMoveUp) HuabuSilver.copy(0.7f) else Color.Transparent, modifier = Modifier.size(16.dp))
+                }
+                IconButton(onClick = onMoveDown, enabled = canMoveDown, modifier = Modifier.size(22.dp)) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move down", tint = if (canMoveDown) HuabuSilver.copy(0.7f) else Color.Transparent, modifier = Modifier.size(16.dp))
+                }
+            }
             IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Filled.Delete, contentDescription = "Remove", tint = HuabuSilver.copy(0.5f), modifier = Modifier.size(18.dp))
             }

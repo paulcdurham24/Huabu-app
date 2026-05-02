@@ -1,5 +1,11 @@
 package com.huabu.app.ui.screens.compose
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,33 +25,79 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.huabu.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposePostScreen(
     onPostSubmitted: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    editPostId: String? = null,
+    viewModel: ComposePostViewModel = hiltViewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+    val isEditMode = editPostId != null
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
     var content by remember { mutableStateOf("") }
     var mood by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
     var showMoodPicker by remember { mutableStateOf(false) }
+    var visibility by remember { mutableStateOf("public") }
+
+    LaunchedEffect(editPostId) {
+        if (editPostId != null) viewModel.loadPostForEdit(editPostId)
+    }
+
+    LaunchedEffect(uiState.initialContent) {
+        if (uiState.initialContent.isNotEmpty() && content.isEmpty()) {
+            content = uiState.initialContent
+            mood = uiState.initialMood
+            tags = uiState.initialTags
+            if (isEditMode) visibility = uiState.initialVisibility
+        }
+    }
+
+    // Auto-save draft as user types (non-edit mode only)
+    LaunchedEffect(content, mood, tags) {
+        if (!isEditMode) viewModel.onDraftChanged(content, mood, tags)
+    }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = PickVisualMedia()
+    ) { uri -> selectedImageUri = uri }
+
+    LaunchedEffect(uiState.submitSuccess) {
+        if (uiState.submitSuccess) {
+            viewModel.onSubmitHandled()
+            onPostSubmitted()
+        }
+    }
+
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let { snackbarHostState.showSnackbar(it) }
+    }
 
     val moods = listOf("😍", "🎵", "🌙", "💅", "🎮", "⚡", "🌟", "✨", "🔥", "💔", "🎉", "😎", "🌊", "💫", "🥺", "😤")
     val charLimit = 500
-    val isPostEnabled = content.isNotBlank() && content.length <= charLimit
+    val isPostEnabled = content.isNotBlank() && content.length <= charLimit && !uiState.isSubmitting
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "New Post",
+                        if (isEditMode) "Edit Post" else "New Post",
                         style = androidx.compose.ui.text.TextStyle(
                             brush = Brush.linearGradient(listOf(HuabuHotPink, HuabuGold)),
                             fontSize = 20.sp,
@@ -60,7 +112,15 @@ fun ComposePostScreen(
                 },
                 actions = {
                     Button(
-                        onClick = { if (isPostEnabled) onPostSubmitted() },
+                        onClick = {
+                            if (isPostEnabled) {
+                                if (isEditMode && editPostId != null) {
+                                    viewModel.editPost(editPostId, content, mood, tags, visibility)
+                                } else {
+                                    viewModel.submitPost(content, mood, tags, visibility, selectedImageUri)
+                                }
+                            }
+                        },
                         enabled = isPostEnabled,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = HuabuHotPink,
@@ -70,7 +130,11 @@ fun ComposePostScreen(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
-                        Text("Post ✦", fontWeight = FontWeight.Bold)
+                        if (uiState.isSubmitting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text(if (isEditMode) "Save ✦" else "Post ✦", fontWeight = FontWeight.Bold)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = HuabuCardBg)
@@ -83,6 +147,24 @@ fun ComposePostScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Draft restored banner
+            if (uiState.hasDraft && !isEditMode && content.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(HuabuCardBg2)
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Edit, null, tint = HuabuGold, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Draft restored", color = HuabuGold, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { viewModel.clearDraft(); content = ""; mood = ""; tags = "" },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                        Text("Discard", color = HuabuSilver, fontSize = 11.sp)
+                    }
+                }
+            }
             // Author row
             Row(
                 modifier = Modifier
@@ -97,14 +179,56 @@ fun ComposePostScreen(
                         .background(Brush.radialGradient(listOf(HuabuDeepPurple, HuabuHotPink))),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Y", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    if (uiState.authorImageUrl.isNotEmpty()) {
+                        AsyncImage(
+                            model = uiState.authorImageUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        val initial = uiState.authorName.firstOrNull()?.uppercaseChar() ?: 'Y'
+                        Text(initial.toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
                 }
 
                 Spacer(Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Your Name", color = HuabuGold, fontWeight = FontWeight.Bold)
-                    Text("@you", color = HuabuSilver, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(uiState.authorName.ifBlank { "Your Name" }, color = HuabuGold, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            onClick = { visibility = if (visibility == "public") "friends" else "public" },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (visibility == "public") HuabuElectricBlue.copy(alpha = 0.2f) else HuabuHotPink.copy(alpha = 0.2f),
+                            modifier = Modifier.border(
+                                1.dp,
+                                if (visibility == "public") HuabuElectricBlue else HuabuHotPink,
+                                RoundedCornerShape(20.dp)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (visibility == "public") Icons.Filled.Public else Icons.Filled.Group,
+                                    contentDescription = null,
+                                    tint = if (visibility == "public") HuabuElectricBlue else HuabuHotPink,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    if (visibility == "public") "Public" else "Friends",
+                                    color = if (visibility == "public") HuabuElectricBlue else HuabuHotPink,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                    Text("@${uiState.authorUsername.ifBlank { "you" }}", color = HuabuSilver, fontSize = 12.sp)
 
                     Spacer(Modifier.height(8.dp))
 
@@ -219,8 +343,46 @@ fun ComposePostScreen(
                 }
             }
 
+            // Selected image preview
+            if (selectedImageUri != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    AsyncImage(
+                        model = selectedImageUri,
+                        contentDescription = "Selected image",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    IconButton(
+                        onClick = { selectedImageUri = null },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .size(28.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    ) {
+                        Icon(Icons.Filled.Close, contentDescription = "Remove image", tint = Color.White, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+
             Spacer(Modifier.weight(1f))
             HorizontalDivider(color = HuabuDivider)
+
+            // Upload progress
+            if (uiState.isSubmitting && selectedImageUri != null) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = HuabuHotPink,
+                    trackColor = HuabuDivider
+                )
+            }
 
             // Toolbar
             Row(
@@ -231,15 +393,23 @@ fun ComposePostScreen(
                     .navigationBarsPadding(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ComposeAction(icon = Icons.Filled.Image, tint = HuabuElectricBlue, label = "Photo") {}
-                ComposeAction(icon = Icons.Filled.VideoCall, tint = HuabuNeonGreen, label = "Video") {}
+                ComposeAction(icon = Icons.Filled.Image, tint = HuabuElectricBlue, label = "Photo") {
+                    imagePickerLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+                }
+                ComposeAction(icon = Icons.Filled.VideoCall, tint = HuabuNeonGreen, label = "Video") {
+                    Toast.makeText(context, "Video coming soon", Toast.LENGTH_SHORT).show()
+                }
                 ComposeAction(
                     icon = Icons.Filled.EmojiEmotions,
                     tint = HuabuGold,
                     label = "Mood"
                 ) { showMoodPicker = !showMoodPicker }
-                ComposeAction(icon = Icons.Filled.MusicNote, tint = HuabuHotPink, label = "Song") {}
-                ComposeAction(icon = Icons.Filled.Palette, tint = HuabuAccentPink, label = "Theme") {}
+                ComposeAction(icon = Icons.Filled.MusicNote, tint = HuabuHotPink, label = "Song") {
+                    Toast.makeText(context, "Song coming soon", Toast.LENGTH_SHORT).show()
+                }
+                ComposeAction(icon = Icons.Filled.Palette, tint = HuabuAccentPink, label = "Theme") {
+                    Toast.makeText(context, "Theme coming soon", Toast.LENGTH_SHORT).show()
+                }
 
                 Spacer(Modifier.weight(1f))
 

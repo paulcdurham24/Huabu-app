@@ -1,5 +1,6 @@
 package com.huabu.app.data.firebase
 
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.UserProfileChangeRequest
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,6 +42,16 @@ class AuthService @Inject constructor() {
 
     fun isLoggedIn(): Boolean = auth.currentUser != null
 
+    fun isEmailVerified(): Boolean = auth.currentUser?.isEmailVerified == true
+
+    suspend fun resendVerificationEmail(): Result<Unit> = try {
+        auth.currentUser?.sendEmailVerification()?.await()
+            ?: throw Exception("No user logged in")
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     suspend fun signInWithEmail(email: String, password: String): Result<String> = try {
         _authState.value = AuthState.Loading
         val result = auth.signInWithEmailAndPassword(email, password).await()
@@ -57,34 +69,62 @@ class AuthService @Inject constructor() {
         password: String,
         displayName: String,
         username: String
-    ): Result<String> = try {
+    ): Result<String> {
+        return try {
         _authState.value = AuthState.Loading
+        Log.d("AuthService", "Starting signup for email=$email")
+
+        // Check username uniqueness before creating the account
+        val normalizedUsername = username.lowercase().replace(" ", "_")
+        if (firebaseService.isUsernameTaken(normalizedUsername)) {
+            _authState.value = AuthState.Error("Username already taken")
+            return Result.failure(Exception("Username already taken"))
+        }
 
         // Create Firebase Auth user
+        Log.d("AuthService", "Calling createUserWithEmailAndPassword...")
         val result = auth.createUserWithEmailAndPassword(email, password).await()
         val userId = result.user?.uid
             ?: throw Exception("Signup failed: No user ID returned")
+        Log.d("AuthService", "Firebase Auth user created: userId=$userId")
 
         // Update profile with display name
+        Log.d("AuthService", "Updating profile...")
         val profileUpdates = UserProfileChangeRequest.Builder()
             .setDisplayName(displayName)
             .build()
         result.user?.updateProfile(profileUpdates)?.await()
+        Log.d("AuthService", "Profile updated")
 
-        // Create user document in Firestore
+        // Send email verification
+        try { result.user?.sendEmailVerification()?.await() } catch (_: Exception) {}
+
+        // Create user document in Firestore (non-blocking - auth already succeeded)
+        Log.d("AuthService", "Creating Firestore user document...")
         val newUser = User(
             id = userId,
             username = username.lowercase().replace(" ", "_"),
             displayName = displayName,
             email = email
         )
-        firebaseService.createUser(userId, newUser)
+        try {
+            val firestoreResult = withTimeout(5000) {
+                firebaseService.createUser(userId, newUser)
+            }
+            Log.d("AuthService", "Firestore result: $firestoreResult")
+        } catch (e: Exception) {
+            Log.d("AuthService", "Firestore failed (will retry later): ${e.message}")
+            // Firestore failed but auth succeeded - still complete signup
+        }
 
         _authState.value = AuthState.Authenticated(userId)
+        Log.d("AuthService", "Signup complete!")
         Result.success(userId)
-    } catch (e: Exception) {
-        _authState.value = AuthState.Error(e.message ?: "Signup failed")
-        Result.failure(e)
+        } catch (e: Exception) {
+            Log.d("AuthService", "Signup failed with exception: ${e.message}")
+            _authState.value = AuthState.Error(e.message ?: "Signup failed")
+            Result.failure(e)
+        }
     }
 
     suspend fun signOut(): Result<Unit> = try {

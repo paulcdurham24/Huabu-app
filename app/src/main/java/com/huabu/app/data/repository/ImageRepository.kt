@@ -31,7 +31,7 @@ class ImageRepository @Inject constructor(
                     // Update user document with new avatar URL
                     val updateResult = firebaseService.updateUser(
                         userId,
-                        mapOf("avatarUrl" to downloadUrl)
+                        mapOf("profileImageUrl" to downloadUrl)
                     )
 
                     updateResult.fold(
@@ -88,7 +88,7 @@ class ImageRepository @Inject constructor(
                     if (value.startsWith("http")) {
                         finalUrl = value
                         // Update user profile
-                        firebaseService.updateUser(userId, mapOf("avatarUrl" to value))
+                        firebaseService.updateUser(userId, mapOf("profileImageUrl" to value))
                         emit(UploadProgress.Success(value))
                     } else {
                         // It's progress
@@ -109,7 +109,7 @@ class ImageRepository @Inject constructor(
             val deleteResult = storageService.deleteImage(currentImageUrl)
 
             // Update user to remove avatar URL regardless of storage delete result
-            firebaseService.updateUser(userId, mapOf("avatarUrl" to ""))
+            firebaseService.updateUser(userId, mapOf("profileImageUrl" to ""))
 
             deleteResult
         } catch (e: Exception) {

@@ -24,15 +24,34 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.huabu.app.data.model.User
+import com.huabu.app.ui.screens.profile.LocalProfileTheme
 import com.huabu.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FriendsScreen(onNavigateToProfile: (String) -> Unit) {
-    val mockFriends = remember { generateMockFriends() }
+fun FriendsScreen(
+    onNavigateToProfile: (String) -> Unit,
+    onNavigateToChat: (String) -> Unit = {},
+    viewModel: FriendsViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("My Friends", "Requests", "Find Friends")
+
+    val appTheme = LocalProfileTheme.current
+    val themeBg = remember(appTheme.backgroundColor) {
+        runCatching { Color(android.graphics.Color.parseColor(appTheme.backgroundColor)) }.getOrElse { HuabuDarkBg }
+    }
+    val themeCard = remember(appTheme.cardColor) {
+        runCatching { Color(android.graphics.Color.parseColor(appTheme.cardColor)) }.getOrElse { HuabuCardBg }
+    }
+    val themeAccent = remember(appTheme.primaryColor) {
+        runCatching { Color(android.graphics.Color.parseColor(appTheme.primaryColor)) }.getOrElse { HuabuHotPink }
+    }
 
     Scaffold(
         topBar = {
@@ -48,11 +67,11 @@ fun FriendsScreen(onNavigateToProfile: (String) -> Unit) {
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = HuabuCardBg
+                    containerColor = themeCard
                 )
             )
         },
-        containerColor = HuabuDarkBg
+        containerColor = themeBg
     ) { padding ->
         Column(
             modifier = Modifier
@@ -61,13 +80,13 @@ fun FriendsScreen(onNavigateToProfile: (String) -> Unit) {
         ) {
             TabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = HuabuCardBg,
-                contentColor = HuabuHotPink,
+                containerColor = themeCard,
+                contentColor = themeAccent,
                 indicator = { tabPositions ->
                     TabRowDefaults.SecondaryIndicator(
                         modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
                         height = 3.dp,
-                        color = HuabuHotPink
+                        color = themeAccent
                     )
                 }
             ) {
@@ -88,16 +107,53 @@ fun FriendsScreen(onNavigateToProfile: (String) -> Unit) {
             }
 
             when (selectedTab) {
-                0 -> FriendsGrid(friends = mockFriends, onNavigateToProfile = onNavigateToProfile)
-                1 -> FriendRequestsTab(onNavigateToProfile = onNavigateToProfile)
-                2 -> FindFriendsTab(onNavigateToProfile = onNavigateToProfile)
+                0 -> FriendsGrid(
+                    friends = uiState.friends,
+                    isLoading = uiState.isLoading,
+                    onNavigateToProfile = onNavigateToProfile,
+                    onMessage = { userId ->
+                        viewModel.getConversationForUser(userId) { onNavigateToChat(it) }
+                    },
+                    onUnfriend = { userId -> viewModel.unfriend(userId) }
+                )
+                1 -> FriendRequestsTab(
+                    requests = uiState.friendRequests,
+                    onNavigateToProfile = onNavigateToProfile,
+                    onAccept = { docId -> viewModel.respondToRequest(docId, true) },
+                    onDecline = { docId -> viewModel.respondToRequest(docId, false) }
+                )
+                2 -> FindFriendsTab(
+                    suggestions = uiState.suggestedUsers,
+                    pendingSentIds = uiState.pendingSentIds,
+                    friendIds = uiState.friendIds,
+                    onNavigateToProfile = onNavigateToProfile,
+                    onAddFriend = { userId -> viewModel.sendFriendRequest(userId) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun FriendsGrid(friends: List<User>, onNavigateToProfile: (String) -> Unit) {
+private fun FriendsGrid(
+    friends: List<User>,
+    isLoading: Boolean,
+    onNavigateToProfile: (String) -> Unit,
+    onMessage: (String) -> Unit,
+    onUnfriend: (String) -> Unit
+) {
+    if (isLoading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = HuabuHotPink)
+        }
+        return
+    }
+    if (friends.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No friends yet — find some in Find Friends!", color = HuabuSilver, textAlign = TextAlign.Center)
+        }
+        return
+    }
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         contentPadding = PaddingValues(12.dp),
@@ -106,17 +162,24 @@ private fun FriendsGrid(friends: List<User>, onNavigateToProfile: (String) -> Un
         modifier = Modifier.fillMaxSize()
     ) {
         items(friends, key = { it.id }) { user ->
-            FriendGridCard(user = user, onClick = { onNavigateToProfile(user.id) })
+            FriendGridCard(
+                user = user,
+                onClick = { onNavigateToProfile(user.id) },
+                onMessage = { onMessage(user.id) },
+                onUnfriend = { onUnfriend(user.id) }
+            )
         }
     }
 }
 
 @Composable
-private fun FriendGridCard(user: User, onClick: () -> Unit) {
+private fun FriendGridCard(user: User, onClick: () -> Unit, onMessage: () -> Unit, onUnfriend: () -> Unit) {
+    var showMenu by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
+
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = HuabuCardBg),
         elevation = CardDefaults.cardElevation(4.dp)
@@ -142,12 +205,21 @@ private fun FriendGridCard(user: User, onClick: () -> Unit) {
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = user.displayName.firstOrNull()?.uppercase() ?: "?",
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 24.sp
-                )
+                if (user.profileImageUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = user.profileImageUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                    )
+                } else {
+                    Text(
+                        text = user.displayName.firstOrNull()?.uppercase() ?: "?",
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 24.sp
+                    )
+                }
                 if (user.isOnline) {
                     Box(
                         modifier = Modifier
@@ -182,27 +254,55 @@ private fun FriendGridCard(user: User, onClick: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Text(text = user.mood, fontSize = 14.sp)
             }
+
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FilledTonalButton(
+                    onClick = onMessage,
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = HuabuElectricBlue.copy(alpha = 0.2f)),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.Message, contentDescription = null, tint = HuabuElectricBlue, modifier = Modifier.size(12.dp))
+                }
+                Box {
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = HuabuSilver, modifier = Modifier.size(16.dp))
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Unfriend", color = HuabuHotPink) },
+                            onClick = { showMenu = false; onUnfriend() },
+                            leadingIcon = { Icon(Icons.Filled.PersonRemove, contentDescription = null, tint = HuabuHotPink) }
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun FriendRequestsTab(onNavigateToProfile: (String) -> Unit) {
-    val requests = remember { generateMockFriends().take(3) }
-
+private fun FriendRequestsTab(
+    requests: List<FriendRequest>,
+    onNavigateToProfile: (String) -> Unit,
+    onAccept: (String) -> Unit,
+    onDecline: (String) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(12.dp)
     ) {
         Text(
-            "${requests.size} friend requests",
+            if (requests.isEmpty()) "No pending requests" else "${requests.size} friend request${if (requests.size != 1) "s" else ""}",
             style = MaterialTheme.typography.titleSmall,
             color = HuabuSilver,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        requests.forEach { user ->
+        requests.forEach { req ->
+            val user = req.user
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -224,7 +324,16 @@ private fun FriendRequestsTab(onNavigateToProfile: (String) -> Unit) {
                             .clickable { onNavigateToProfile(user.id) },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(user.displayName.first().uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        if (user.profileImageUrl.isNotEmpty()) {
+                            AsyncImage(
+                                model = user.profileImageUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize().clip(CircleShape)
+                            )
+                        } else {
+                            Text(user.displayName.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -233,12 +342,12 @@ private fun FriendRequestsTab(onNavigateToProfile: (String) -> Unit) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         FilledTonalButton(
-                            onClick = {},
+                            onClick = { onAccept(req.docId) },
                             colors = ButtonDefaults.filledTonalButtonColors(containerColor = HuabuHotPink),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         ) { Text("Accept", fontSize = 12.sp) }
                         OutlinedButton(
-                            onClick = {},
+                            onClick = { onDecline(req.docId) },
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         ) { Text("Decline", fontSize = 12.sp, color = HuabuSilver) }
                     }
@@ -249,9 +358,13 @@ private fun FriendRequestsTab(onNavigateToProfile: (String) -> Unit) {
 }
 
 @Composable
-private fun FindFriendsTab(onNavigateToProfile: (String) -> Unit) {
-    val suggestions = remember { generateMockFriends().drop(3) }
-
+private fun FindFriendsTab(
+    suggestions: List<User>,
+    pendingSentIds: Set<String>,
+    friendIds: Set<String>,
+    onNavigateToProfile: (String) -> Unit,
+    onAddFriend: (String) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -265,6 +378,8 @@ private fun FindFriendsTab(onNavigateToProfile: (String) -> Unit) {
         )
 
         suggestions.forEach { user ->
+            val isFriend = user.id in friendIds
+            val isPending = user.id in pendingSentIds
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -286,7 +401,7 @@ private fun FindFriendsTab(onNavigateToProfile: (String) -> Unit) {
                             .background(Brush.radialGradient(listOf(HuabuHotPink, HuabuDeepPurple))),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(user.displayName.first().uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(user.displayName.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -295,30 +410,26 @@ private fun FindFriendsTab(onNavigateToProfile: (String) -> Unit) {
                         Text("${user.followersCount} followers", style = MaterialTheme.typography.labelSmall, color = HuabuAccentCyan)
                     }
                     Button(
-                        onClick = {},
-                        colors = ButtonDefaults.buttonColors(containerColor = HuabuHotPink),
+                        onClick = { if (!isFriend && !isPending) onAddFriend(user.id) },
+                        enabled = !isFriend && !isPending,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = when {
+                                isFriend -> HuabuNeonGreen
+                                isPending -> HuabuDivider
+                                else -> HuabuHotPink
+                            }
+                        ),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         shape = RoundedCornerShape(20.dp)
                     ) {
-                        Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Add", fontSize = 12.sp)
+                        when {
+                            isFriend -> { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text("Friends", fontSize = 12.sp) }
+                            isPending -> Text("Pending", fontSize = 12.sp)
+                            else -> { Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(4.dp)); Text("Add", fontSize = 12.sp) }
+                        }
                     }
                 }
             }
         }
     }
 }
-
-private fun generateMockFriends(): List<User> = listOf(
-    User("u1", "xenastar", "Xena Starfire", mood = "😍", isOnline = true, followersCount = 428),
-    User("u2", "djphantom", "DJ Phantom", mood = "🎵", isOnline = true, followersCount = 1203),
-    User("u3", "lunaeclipse", "Luna Eclipse", mood = "🌙", followersCount = 334),
-    User("u4", "retrokid2k", "Retro Kid", mood = "🎮", isOnline = false, followersCount = 89),
-    User("u5", "glitterqueen99", "Glitter Queen", mood = "💅", isOnline = true, followersCount = 777),
-    User("u6", "neonninja", "Neon Ninja", mood = "⚡", followersCount = 256),
-    User("u7", "starchaser", "Star Chaser", mood = "🌟", isOnline = true, followersCount = 512),
-    User("u8", "pixelprince", "Pixel Prince", mood = "🎮", followersCount = 198),
-    User("u9", "cosmicwave", "Cosmic Wave", mood = "🌊", isOnline = true, followersCount = 631),
-    User("u10", "velvetdream", "Velvet Dream", mood = "✨", followersCount = 445)
-)

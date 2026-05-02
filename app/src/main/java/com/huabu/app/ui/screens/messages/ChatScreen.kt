@@ -1,8 +1,19 @@
 package com.huabu.app.ui.screens.messages
 
+import android.media.MediaPlayer
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,45 +29,48 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.huabu.app.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
-
-data class ChatMessage(
-    val id: String,
-    val senderId: String,
-    val text: String,
-    val timestamp: Long,
-    val isRead: Boolean = false
-)
-
-data class Conversation(
-    val id: String,
-    val otherUserId: String,
-    val otherUserName: String,
-    val otherUserMood: String,
-    val isOnline: Boolean,
-    val messages: List<ChatMessage>
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     conversationId: String,
     onBack: () -> Unit,
-    onNavigateToProfile: (String) -> Unit
+    onNavigateToProfile: (String) -> Unit,
+    viewModel: ChatViewModel = hiltViewModel()
 ) {
-    val conversation = remember { generateMockConversation(conversationId) }
+    val uiState by viewModel.uiState.collectAsState()
     var messageText by remember { mutableStateOf("") }
+    var showChatMenu by remember { mutableStateOf(false) }
+    val imageLauncher = rememberLauncherForActivityResult(PickVisualMedia()) { uri: Uri? ->
+        uri?.let { viewModel.sendImageMessage(conversationId, it) }
+    }
     val listState = rememberLazyListState()
 
-    // Scroll to bottom on launch
-    LaunchedEffect(Unit) {
-        if (conversation.messages.isNotEmpty()) {
-            listState.animateScrollToItem(conversation.messages.size - 1)
+    LaunchedEffect(conversationId) {
+        viewModel.loadChat(conversationId)
+    }
+
+    // Scroll to bottom when new messages arrive
+    LaunchedEffect(uiState.messages.size) {
+        if (uiState.messages.isNotEmpty()) {
+            listState.animateScrollToItem(uiState.messages.size - 1)
+        }
+    }
+
+    // Load more messages when scrolled to top
+    val firstVisibleIndex by remember { derivedStateOf { listState.firstVisibleItemIndex } }
+    LaunchedEffect(firstVisibleIndex) {
+        if (firstVisibleIndex == 0 && !uiState.isLoading) {
+            viewModel.loadMoreMessages()
         }
     }
 
@@ -64,26 +78,25 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
+                    val otherUser = uiState.otherUser
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onNavigateToProfile(conversation.otherUserId) }
+                        modifier = Modifier.clickable { otherUser?.let { onNavigateToProfile(it.id) } }
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(listOf(HuabuDeepPurple, HuabuHotPink))
-                                ),
+                                .background(Brush.radialGradient(listOf(HuabuDeepPurple, HuabuHotPink))),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                conversation.otherUserName.first().uppercase(),
+                                otherUser?.displayName?.firstOrNull()?.uppercase() ?: "?",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp
                             )
-                            if (conversation.isOnline) {
+                            if (otherUser?.isOnline == true) {
                                 Box(
                                     modifier = Modifier
                                         .size(10.dp)
@@ -97,19 +110,27 @@ fun ChatScreen(
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    conversation.otherUserName,
+                                    otherUser?.displayName ?: "...",
                                     color = HuabuGold,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
-                                if (conversation.otherUserMood.isNotEmpty()) {
+                                if (otherUser?.mood?.isNotEmpty() == true) {
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text(conversation.otherUserMood, fontSize = 14.sp)
+                                    Text(otherUser.mood, fontSize = 14.sp)
                                 }
                             }
                             Text(
-                                if (conversation.isOnline) "Active now" else "Offline",
-                                color = if (conversation.isOnline) HuabuNeonGreen else HuabuSilver,
+                                when {
+                                    uiState.otherUserTyping -> "typing…"
+                                    otherUser?.isOnline == true -> "Active now"
+                                    else -> "Offline"
+                                },
+                                color = when {
+                                    uiState.otherUserTyping -> HuabuElectricBlue
+                                    otherUser?.isOnline == true -> HuabuNeonGreen
+                                    else -> HuabuSilver
+                                },
                                 fontSize = 12.sp
                             )
                         }
@@ -121,11 +142,34 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { onNavigateToProfile(conversation.otherUserId) }) {
+                    IconButton(onClick = { uiState.otherUser?.let { onNavigateToProfile(it.id) } }) {
                         Icon(Icons.Filled.Person, contentDescription = "View Profile", tint = HuabuSilver)
                     }
-                    IconButton(onClick = { /* More options */ }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = HuabuSilver)
+                    Box {
+                        IconButton(onClick = { showChatMenu = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = HuabuSilver)
+                        }
+                        DropdownMenu(
+                            expanded = showChatMenu,
+                            onDismissRequest = { showChatMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(if (uiState.isMuted) "Unmute notifications" else "Mute notifications") },
+                                onClick = { showChatMenu = false; viewModel.toggleMute() },
+                                leadingIcon = {
+                                    Icon(
+                                        if (uiState.isMuted) Icons.Filled.NotificationsActive else Icons.Filled.NotificationsOff,
+                                        contentDescription = null,
+                                        tint = if (uiState.isMuted) HuabuNeonGreen else HuabuSilver
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("View profile") },
+                                onClick = { showChatMenu = false; uiState.otherUser?.let { onNavigateToProfile(it.id) } },
+                                leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null, tint = HuabuSilver) }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = HuabuCardBg)
@@ -138,79 +182,141 @@ fun ChatScreen(
                     .background(HuabuCardBg)
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    IconButton(onClick = { /* Add image */ }) {
-                        Icon(Icons.Filled.Image, contentDescription = "Add Image", tint = HuabuHotPink)
-                    }
-                    IconButton(onClick = { /* Add emoji */ }) {
-                        Icon(Icons.Filled.EmojiEmotions, contentDescription = "Add Emoji", tint = HuabuHotPink)
-                    }
-                    OutlinedTextField(
-                        value = messageText,
-                        onValueChange = { messageText = it },
-                        placeholder = { Text("Type a message...", color = HuabuSilver, fontSize = 14.sp) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = HuabuHotPink,
-                            unfocusedBorderColor = HuabuDivider,
-                            focusedTextColor = HuabuOnSurface,
-                            unfocusedTextColor = HuabuOnSurface,
-                            cursorColor = HuabuHotPink
-                        ),
-                        singleLine = false,
-                        maxLines = 4
-                    )
-                    IconButton(
-                        onClick = {
-                            if (messageText.isNotBlank()) {
-                                // Send message
-                                messageText = ""
-                            }
-                        },
-                        enabled = messageText.isNotBlank()
+                if (uiState.isRecording) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(
-                            Icons.Filled.Send,
-                            contentDescription = "Send",
-                            tint = if (messageText.isNotBlank()) HuabuHotPink else HuabuSilver
+                        Icon(Icons.Filled.Mic, null, tint = HuabuHotPink, modifier = Modifier.size(20.dp))
+                        val secs = uiState.recordingSeconds
+                        Text(
+                            "%d:%02d".format(secs / 60, secs % 60),
+                            color = HuabuHotPink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)
                         )
+                        IconButton(onClick = { viewModel.cancelRecording() }) {
+                            Icon(Icons.Filled.Delete, null, tint = HuabuSilver)
+                        }
+                        IconButton(onClick = { viewModel.stopAndSendVoice(conversationId) }) {
+                            Icon(Icons.Filled.Send, null, tint = HuabuNeonGreen)
+                        }
+                    }
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(onClick = { imageLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) }) {
+                            Icon(Icons.Filled.Image, contentDescription = "Add Image", tint = HuabuHotPink)
+                        }
+                        OutlinedTextField(
+                            value = messageText,
+                            onValueChange = { messageText = it; if (it.isNotEmpty()) viewModel.onTyping() },
+                            placeholder = { Text("Type a message...", color = HuabuSilver, fontSize = 14.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = HuabuHotPink,
+                                unfocusedBorderColor = HuabuDivider,
+                                focusedTextColor = HuabuOnSurface,
+                                unfocusedTextColor = HuabuOnSurface,
+                                cursorColor = HuabuHotPink
+                            ),
+                            singleLine = false,
+                            maxLines = 4
+                        )
+                        if (messageText.isBlank()) {
+                            IconButton(onClick = { viewModel.startRecording() }) {
+                                Icon(Icons.Filled.Mic, contentDescription = "Voice", tint = HuabuHotPink)
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    viewModel.stopTyping()
+                                    viewModel.sendMessage(conversationId, messageText)
+                                    messageText = ""
+                                },
+                                enabled = !uiState.isSending
+                            ) {
+                                Icon(Icons.Filled.Send, contentDescription = "Send", tint = HuabuHotPink)
+                            }
+                        }
                     }
                 }
             }
         },
         containerColor = HuabuDarkBg
     ) { padding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 12.dp)
-        ) {
-            items(conversation.messages, key = { it.id }) { message ->
-                val isMe = message.senderId == "me"
-                ChatBubble(
-                    message = message,
-                    isMe = isMe,
-                    otherUserName = conversation.otherUserName
-                )
+        if (uiState.isLoading) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = HuabuHotPink)
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+                if (uiState.isLoadingMore) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = HuabuHotPink, strokeWidth = 2.dp)
+                        }
+                    }
+                }
+                val lastReadSentId = uiState.messages
+                        .filter { it.senderId == uiState.currentUserId && it.isRead }
+                        .maxByOrNull { it.timestamp }?.id
+                items(uiState.messages, key = { it.id.ifBlank { it.timestamp.toString() } }) { message ->
+                    val isMe = message.senderId == uiState.currentUserId
+                    ChatBubble(
+                        message = message,
+                        isMe = isMe,
+                        otherUserName = uiState.otherUser?.displayName ?: "",
+                        isLastReadSent = isMe && message.id.isNotEmpty() && message.id == lastReadSentId,
+                        onDelete = if (isMe && message.id.isNotEmpty()) {
+                            { viewModel.deleteMessage(conversationId, message.id) }
+                        } else null
+                    )
+                }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatBubble(
-    message: ChatMessage,
+    message: com.huabu.app.data.model.Message,
     isMe: Boolean,
-    otherUserName: String
+    otherUserName: String,
+    isLastReadSent: Boolean = false,
+    onDelete: (() -> Unit)? = null
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete message") },
+            text = { Text("Remove this message for everyone?") },
+            confirmButton = {
+                TextButton(onClick = { showDeleteDialog = false; onDelete?.invoke() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
@@ -239,41 +345,59 @@ private fun ChatBubble(
             }
 
             Column(horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
+                val bubbleShape = RoundedCornerShape(
+                    topStart = if (isMe) 16.dp else 4.dp,
+                    topEnd = if (isMe) 4.dp else 16.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 16.dp
+                )
+                val isVoice = message.voiceUrl.isNotEmpty()
+                val isImage = !isVoice && message.content.startsWith("https://") &&
+                    (message.content.contains(".jpg") || message.content.contains(".png") ||
+                     message.content.contains(".jpeg") || message.content.contains("firebasestorage"))
+
                 Box(
                     modifier = Modifier
-                        .clip(
-                            RoundedCornerShape(
-                                topStart = if (isMe) 16.dp else 4.dp,
-                                topEnd = if (isMe) 4.dp else 16.dp,
-                                bottomStart = 16.dp,
-                                bottomEnd = 16.dp
-                            )
-                        )
+                        .clip(bubbleShape)
                         .background(
-                            if (isMe) {
-                                Brush.linearGradient(listOf(HuabuHotPink, HuabuElectricBlue))
-                            } else {
-                                Brush.linearGradient(listOf(HuabuCardBg, HuabuCardBg2))
-                            }
+                            if (isMe) Brush.linearGradient(listOf(HuabuHotPink, HuabuElectricBlue))
+                            else Brush.linearGradient(listOf(HuabuCardBg, HuabuCardBg2))
                         )
-                        .border(
-                            1.dp,
-                            if (isMe) Color.Transparent else HuabuDivider,
-                            RoundedCornerShape(
-                                topStart = if (isMe) 16.dp else 4.dp,
-                                topEnd = if (isMe) 4.dp else 16.dp,
-                                bottomStart = 16.dp,
-                                bottomEnd = 16.dp
-                            )
+                        .border(1.dp, if (isMe) Color.Transparent else HuabuDivider, bubbleShape)
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { if (onDelete != null) showDeleteDialog = true }
                         )
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .padding(if (isImage) 4.dp else 0.dp)
                 ) {
-                    Text(
-                        text = message.text,
-                        color = if (isMe) Color.White else HuabuOnSurface,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    when {
+                        isVoice -> {
+                            VoiceBubble(
+                                voiceUrl = message.voiceUrl,
+                                durationMs = message.voiceDurationMs,
+                                isMe = isMe
+                            )
+                        }
+                        isImage -> {
+                            AsyncImage(
+                                model = message.content,
+                                contentDescription = "Image message",
+                                modifier = Modifier
+                                    .widthIn(max = 220.dp)
+                                    .clip(bubbleShape),
+                                contentScale = ContentScale.FillWidth
+                            )
+                        }
+                        else -> {
+                            Text(
+                                text = message.content,
+                                color = if (isMe) Color.White else HuabuOnSurface,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
                 }
 
                 Row(
@@ -296,8 +420,131 @@ private fun ChatBubble(
                         )
                     }
                 }
+                if (isLastReadSent) {
+                    Text(
+                        text = "Seen",
+                        color = HuabuNeonGreen,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun VoiceBubble(
+    voiceUrl: String,
+    durationMs: Long,
+    isMe: Boolean
+) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var progress by remember { mutableFloatStateOf(0f) }
+    var elapsedMs by remember { mutableLongStateOf(0L) }
+    val mediaPlayer = remember { MediaPlayer() }
+
+    DisposableEffect(voiceUrl) {
+        onDispose {
+            mediaPlayer.runCatching {
+                if (isPlaying) stop()
+                release()
+            }
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            val startTime = System.currentTimeMillis() - elapsedMs
+            while (isPlaying && mediaPlayer.isPlaying) {
+                val now = System.currentTimeMillis() - startTime
+                elapsedMs = now
+                progress = if (durationMs > 0) now.toFloat() / durationMs else 0f
+                if (progress >= 1f) {
+                    isPlaying = false
+                    progress = 0f
+                    elapsedMs = 0L
+                    break
+                }
+                kotlinx.coroutines.delay(100)
+            }
+        }
+    }
+
+    fun togglePlay() {
+        if (isPlaying) {
+            mediaPlayer.pause()
+            isPlaying = false
+        } else {
+            if (!mediaPlayer.isPlaying) {
+                mediaPlayer.runCatching {
+                    if (elapsedMs == 0L) {
+                        reset()
+                        setDataSource(voiceUrl)
+                        setOnPreparedListener { mp ->
+                            mp.start()
+                            isPlaying = true
+                        }
+                        prepareAsync()
+                    } else {
+                        start()
+                        isPlaying = true
+                    }
+                }
+            }
+        }
+    }
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(durationMillis = 100, easing = LinearEasing),
+        label = "voice_progress"
+    )
+
+    val displayMs = if (isPlaying || elapsedMs > 0) elapsedMs else durationMs
+    val dispSec = (displayMs / 1000).toInt()
+    val iconTint = if (isMe) Color.White else HuabuHotPink
+    val textColor = if (isMe) Color.White else HuabuOnSurface
+    val trackColor = if (isMe) Color.White.copy(alpha = 0.3f) else HuabuDivider
+    val barColor = if (isMe) Color.White else HuabuHotPink
+
+    Row(
+        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        IconButton(
+            onClick = { togglePlay() },
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (isPlaying) "Pause" else "Play",
+                tint = iconTint,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Column(modifier = Modifier.widthIn(min = 100.dp, max = 160.dp)) {
+            LinearProgressIndicator(
+                progress = { animatedProgress },
+                modifier = Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)),
+                color = barColor,
+                trackColor = trackColor
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = "%d:%02d".format(dispSec / 60, dispSec % 60),
+                color = textColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Icon(
+            Icons.Filled.GraphicEq,
+            contentDescription = null,
+            tint = iconTint.copy(alpha = if (isPlaying) 1f else 0.5f),
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
@@ -306,56 +553,3 @@ private fun formatTime(ts: Long): String {
     return sdf.format(Date(ts))
 }
 
-private fun generateMockConversation(conversationId: String): Conversation {
-    return Conversation(
-        id = conversationId,
-        otherUserId = "u1",
-        otherUserName = "Xena Starfire",
-        otherUserMood = "😍",
-        isOnline = true,
-        messages = listOf(
-            ChatMessage(
-                id = "m1",
-                senderId = "u1",
-                text = "Hey! Did you see my new profile theme??",
-                timestamp = System.currentTimeMillis() - 3_600_000,
-                isRead = true
-            ),
-            ChatMessage(
-                id = "m2",
-                senderId = "me",
-                text = "Yeah it looks amazing! ✨ Love the neon colors",
-                timestamp = System.currentTimeMillis() - 3_500_000,
-                isRead = true
-            ),
-            ChatMessage(
-                id = "m3",
-                senderId = "u1",
-                text = "Thanks!! I spent all night customizing it lol",
-                timestamp = System.currentTimeMillis() - 3_400_000,
-                isRead = true
-            ),
-            ChatMessage(
-                id = "m4",
-                senderId = "u1",
-                text = "You should update yours too! The new widgets are so cool",
-                timestamp = System.currentTimeMillis() - 3_300_000,
-                isRead = true
-            ),
-            ChatMessage(
-                id = "m5",
-                senderId = "me",
-                text = "I added that music widget - now playing thing",
-                timestamp = System.currentTimeMillis() - 3_200_000,
-                isRead = true
-            ),
-            ChatMessage(
-                id = "m6",
-                senderId = "u1",
-                text = "omg did u see my new profile theme???",
-                timestamp = System.currentTimeMillis() - 300_000,
-                isRead = false
-            )
-        )
-    )
-}

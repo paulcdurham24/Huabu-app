@@ -2,13 +2,17 @@ package com.huabu.app.ui.screens.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
+import com.google.firebase.messaging.FirebaseMessaging
 import com.huabu.app.data.firebase.AuthService
 import com.huabu.app.data.firebase.AuthState
+import com.huabu.app.data.firebase.FirebaseService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 data class LoginUiState(
@@ -32,7 +36,8 @@ data class SignupUiState(
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authService: AuthService
+    private val authService: AuthService,
+    private val firebaseService: FirebaseService
 ) : ViewModel() {
 
     private val _loginState = MutableStateFlow(LoginUiState())
@@ -78,13 +83,14 @@ class AuthViewModel @Inject constructor(
 
             result.fold(
                 onSuccess = { userId ->
-                    _loginState.value = state.copy(
+                    _loginState.value = _loginState.value.copy(
                         isLoading = false,
                         loginSuccess = true
                     )
+                    registerFcmToken(userId)
                 },
                 onFailure = { error ->
-                    _loginState.value = state.copy(
+                    _loginState.value = _loginState.value.copy(
                         isLoading = false,
                         errorMessage = error.message ?: "Login failed. Please try again."
                     )
@@ -115,34 +121,42 @@ class AuthViewModel @Inject constructor(
 
     fun signup() {
         val state = _signupState.value
+        Log.d("AuthViewModel", "signup() called with email=${state.email}, displayName=${state.displayName}")
 
         // Validation
         when {
             state.displayName.isBlank() -> {
+                Log.d("AuthViewModel", "Validation failed: display name blank")
                 _signupState.value = state.copy(errorMessage = "Please enter your display name")
                 return
             }
             state.username.isBlank() -> {
+                Log.d("AuthViewModel", "Validation failed: username blank")
                 _signupState.value = state.copy(errorMessage = "Please enter a username")
                 return
             }
             state.email.isBlank() -> {
+                Log.d("AuthViewModel", "Validation failed: email blank")
                 _signupState.value = state.copy(errorMessage = "Please enter your email")
                 return
             }
             state.password.isBlank() -> {
+                Log.d("AuthViewModel", "Validation failed: password blank")
                 _signupState.value = state.copy(errorMessage = "Please enter a password")
                 return
             }
             state.password.length < 6 -> {
+                Log.d("AuthViewModel", "Validation failed: password too short")
                 _signupState.value = state.copy(errorMessage = "Password must be at least 6 characters")
                 return
             }
             state.password != state.confirmPassword -> {
+                Log.d("AuthViewModel", "Validation failed: passwords don't match")
                 _signupState.value = state.copy(errorMessage = "Passwords do not match")
                 return
             }
         }
+        Log.d("AuthViewModel", "Validation passed, calling authService.signUpWithEmail")
 
         viewModelScope.launch {
             _signupState.value = state.copy(isLoading = true, errorMessage = null)
@@ -154,24 +168,27 @@ class AuthViewModel @Inject constructor(
                 username = state.username
             )
 
+            Log.d("AuthViewModel", "Signup result: $result")
             result.fold(
                 onSuccess = { userId ->
-                    _signupState.value = state.copy(
+                    Log.d("AuthViewModel", "Signup success! userId=$userId, setting signupSuccess=true")
+                    _signupState.value = _signupState.value.copy(
                         isLoading = false,
                         signupSuccess = true
                     )
+                    Log.d("AuthViewModel", "State after update: ${_signupState.value}")
+                    registerFcmToken(userId)
                 },
                 onFailure = { error ->
+                    Log.d("AuthViewModel", "Signup failed: ${error.message}")
                     val errorMsg = when {
-                        error.message?.contains("email address is already in use") == true ->
-                            "An account with this email already exists"
-                        error.message?.contains(" badly formatted") == true ->
-                            "Please enter a valid email address"
-                        error.message?.contains("password is invalid") == true ->
-                            "Password is too weak. Use at least 6 characters"
+                        error.message?.contains("Username already taken") == true -> "That username is already taken. Please choose another."
+                        error.message?.contains("email") == true -> "Invalid email format or email already in use"
+                        error.message?.contains("password") == true -> "Password is too weak. Use at least 6 characters"
+                        error.message?.contains("network") == true -> "Network error. Please check your connection"
                         else -> error.message ?: "Signup failed. Please try again."
                     }
-                    _signupState.value = state.copy(
+                    _signupState.value = _signupState.value.copy(
                         isLoading = false,
                         errorMessage = errorMsg
                     )
@@ -193,6 +210,29 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    fun changePassword(newPassword: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = authService.updatePassword(newPassword)
+            onResult(result)
+        }
+    }
+
+    fun deleteAccount(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = authService.deleteAccount()
+            onResult(result)
+        }
+    }
+
+    fun isEmailVerified(): Boolean = authService.isEmailVerified()
+
+    fun resendVerificationEmail(onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = authService.resendVerificationEmail()
+            onResult(result)
+        }
+    }
+
     fun clearLoginError() {
         _loginState.value = _loginState.value.copy(errorMessage = null)
     }
@@ -207,5 +247,14 @@ class AuthViewModel @Inject constructor(
 
     fun onSignupSuccessHandled() {
         _signupState.value = _signupState.value.copy(signupSuccess = false)
+    }
+
+    private fun registerFcmToken(userId: String) {
+        viewModelScope.launch {
+            try {
+                val token = FirebaseMessaging.getInstance().token.await()
+                firebaseService.saveFcmToken(userId, token)
+            } catch (_: Exception) {}
+        }
     }
 }

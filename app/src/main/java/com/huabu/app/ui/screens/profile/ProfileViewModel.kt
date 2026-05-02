@@ -1,13 +1,24 @@
 package com.huabu.app.ui.screens.profile
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.huabu.app.data.local.dao.*
 import com.huabu.app.data.model.*
+import com.huabu.app.data.firebase.FirebaseService
+import com.huabu.app.data.firebase.AuthService
+import com.huabu.app.data.firebase.StorageService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class ProfileCommentsState(
+    val postId: String = "",
+    val comments: List<Comment> = emptyList(),
+    val isLoading: Boolean = false
+)
 
 data class ProfileUiState(
     val user: User? = null,
@@ -30,6 +41,7 @@ data class ProfileUiState(
     val currentlyWatching: CurrentlyWatching? = null,
     val nfts: List<NftItem> = emptyList(),
     val polls: List<ProfilePoll> = emptyList(),
+    val votedPollOptions: Map<String, Char> = emptyMap(),
     val codeSnippets: List<CodeSnippet> = emptyList(),
     val techStack: List<TechStackItem> = emptyList(),
     val gifs: List<GifItem> = emptyList(),
@@ -41,9 +53,11 @@ data class ProfileUiState(
     val ticTacToeGames: List<TicTacToeGame> = emptyList(),
     val minesweeperGames: List<MinesweeperGame> = emptyList(),
     val pendingGameInvites: List<GameInvite> = emptyList(),
+    val savedPosts: List<Post> = emptyList(),
     val isLoading: Boolean = true,
     val isCurrentUser: Boolean = false,
     val isFollowing: Boolean = false,
+    val isBlocked: Boolean = false,
     val error: String? = null
 )
 
@@ -78,39 +92,117 @@ class ProfileViewModel @Inject constructor(
     private val travelWishDao: TravelWishDao,
     private val ticTacToeDao: TicTacToeDao,
     private val minesweeperDao: MinesweeperDao,
-    private val gameInviteDao: GameInviteDao
+    private val gameInviteDao: GameInviteDao,
+    private val firebaseService: FirebaseService,
+    private val storageService: StorageService,
+    private val authService: AuthService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
+    private val _commentsState = MutableStateFlow(ProfileCommentsState())
+    val commentsState: StateFlow<ProfileCommentsState> = _commentsState.asStateFlow()
+
     fun loadProfile(userId: String) {
-        val resolvedId = if (userId == "me") "current_user" else userId
-        val isMe = userId == "me" || userId == "current_user"
+        val currentUserId = authService.getCurrentUserId()
+        val resolvedId = if (userId == "me") currentUserId ?: userId else userId
+        val isMe = userId == "me" || userId == currentUserId
+        
+        Log.d("ProfileViewModel", "loadProfile() called - userId=$userId, currentUserId=$currentUserId, resolvedId=$resolvedId, isMe=$isMe")
+
+        // Load pinned posts
+        viewModelScope.launch {
+            val pinned = firebaseService.getPinnedPosts(resolvedId).getOrDefault(emptyList())
+            _uiState.update { it.copy(pinnedPosts = pinned) }
+        }
+
+        // Load polls
+        loadPolls(resolvedId)
+
+        // Record profile view (increments counter for non-self visits)
+        if (!isMe) recordProfileView(resolvedId)
+
+        // Check if blocked (non-self only)
+        if (!isMe) {
+            val currentUid = authService.getCurrentUserId() ?: ""
+            if (currentUid.isNotEmpty()) {
+                viewModelScope.launch {
+                    val blocked = firebaseService.isUserBlocked(currentUid, resolvedId)
+                    _uiState.update { it.copy(isBlocked = blocked) }
+                }
+            }
+        }
+
+        // Stream live user from Firebase (also gets initial load + view count updates)
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            firebaseService.getUserFlow(resolvedId)
+                .catch { e ->
+                    if (!isMe) {
+                        val mockUser = getMockUser(resolvedId, isMe)
+                        _uiState.update { it.copy(user = mockUser, isCurrentUser = isMe, isLoading = false, error = e.message) }
+                    } else {
+                        _uiState.update { it.copy(isCurrentUser = true, isLoading = false, error = e.message) }
+                    }
+                }
+                .collect { user ->
+                    if (user != null) {
+                        _uiState.update { it.copy(user = user, isCurrentUser = isMe, isLoading = false) }
+                    } else if (!isMe) {
+                        val mockUser = getMockUser(resolvedId, isMe)
+                        _uiState.update { it.copy(user = mockUser, isCurrentUser = isMe, isLoading = false) }
+                    } else {
+                        _uiState.update { it.copy(isCurrentUser = true, isLoading = false) }
+                    }
+                }
+        }
+
+        // Posts from Firestore real-time
+        viewModelScope.launch {
+            firebaseService.getUserPostsFlow(resolvedId)
+                .catch { e -> _uiState.update { it.copy(error = e.message) } }
+                .collect { posts -> _uiState.update { it.copy(posts = posts) } }
+        }
+
+        // Top friends from Firestore
+        viewModelScope.launch {
+            firebaseService.getFriendsFlow(resolvedId)
+                .catch { }
+                .collect { friends ->
+                    val friendUsers = friends.take(8).mapNotNull { f ->
+                        val u = firebaseService.getUser(f.friendId).getOrNull() ?: return@mapNotNull null
+                        Friend(
+                            id = f.id,
+                            userId = resolvedId,
+                            friendId = f.friendId,
+                            friendName = u.displayName,
+                            friendUsername = u.username,
+                            friendImageUrl = u.profileImageUrl,
+                            status = "accepted",
+                            isTopFriend = true,
+                            topFriendRank = friends.indexOf(f) + 1
+                        )
+                    }
+                    _uiState.update { it.copy(topFriends = friendUsers) }
+                }
+        }
 
         viewModelScope.launch {
             combine(
-                postDao.getPostsByUser(resolvedId),
-                friendDao.getTopFriends(resolvedId),
                 profilePhotoDao.getPhotosForUser(resolvedId),
                 videoLinkDao.getVideoLinksForUser(resolvedId),
                 profileWidgetSettingsDao.getSettingsForUser(resolvedId)
-            ) { posts, friends, photos, videos, settings ->
-                val mockUser = getMockUser(resolvedId, isMe)
+            ) { photos, videos, settings ->
                 _uiState.update {
                     it.copy(
-                        user = mockUser,
-                        posts = if (posts.isEmpty()) getMockPosts(resolvedId, mockUser) else posts,
-                        topFriends = if (friends.isEmpty()) getMockFriends(resolvedId) else friends,
-                        photos = if (photos.isEmpty()) getMockPhotos(resolvedId) else photos,
-                        videoLinks = if (videos.isEmpty()) getMockVideos(resolvedId) else videos,
+                        photos = photos,
+                        videoLinks = videos,
                         widgetSettings = settings ?: ProfileWidgetSettings(resolvedId),
-                        isLoading = false,
-                        isCurrentUser = isMe
                     )
                 }
             }.catch { e ->
-                _uiState.update { it.copy(error = e.message, isLoading = false) }
+                _uiState.update { it.copy(error = e.message) }
             }.collect()
         }
 
@@ -121,8 +213,8 @@ class ProfileViewModel @Inject constructor(
             ) { music, films ->
                 _uiState.update {
                     it.copy(
-                        topMusic = if (music.isEmpty()) getMockMusic(resolvedId) else music,
-                        topFilms = if (films.isEmpty()) getMockFilms(resolvedId) else films
+                        topMusic = if (music.isEmpty() && !isMe) getMockMusic(resolvedId) else music,
+                        topFilms = if (films.isEmpty() && !isMe) getMockFilms(resolvedId) else films
                     )
                 }
             }.catch { }.collect()
@@ -148,7 +240,7 @@ class ProfileViewModel @Inject constructor(
 
         viewModelScope.launch {
             badgeDao.getBadgesForUser(resolvedId).collect { badges ->
-                val shown = if (badges.isEmpty()) getMockBadges(resolvedId) else badges
+                val shown = if (badges.isEmpty() && !isMe) getMockBadges(resolvedId) else badges
                 _uiState.update { it.copy(badges = shown) }
             }
         }
@@ -161,7 +253,7 @@ class ProfileViewModel @Inject constructor(
 
         viewModelScope.launch {
             recentTrackDao.getRecentTracks(resolvedId).collect { tracks ->
-                val shown = if (tracks.isEmpty()) getMockRecentTracks(resolvedId) else tracks
+                val shown = if (tracks.isEmpty() && !isMe) getMockRecentTracks(resolvedId) else tracks
                 _uiState.update { it.copy(recentTracks = shown) }
             }
         }
@@ -186,27 +278,34 @@ class ProfileViewModel @Inject constructor(
 
         viewModelScope.launch {
             nftItemDao.getNftsForUser(resolvedId).collect { nfts ->
-                val shown = if (nfts.isEmpty()) getMockNfts(resolvedId) else nfts
+                val shown = if (nfts.isEmpty() && !isMe) getMockNfts(resolvedId) else nfts
                 _uiState.update { it.copy(nfts = shown) }
             }
         }
 
         viewModelScope.launch {
             profilePollDao.getActivePolls(resolvedId).collect { polls ->
-                _uiState.update { it.copy(polls = polls) }
+                val voterId = authService.getCurrentUserId() ?: ""
+                val voted = if (voterId.isNotEmpty()) {
+                    polls.mapNotNull { poll ->
+                        val option = profilePollDao.getUserVote(poll.id, voterId)
+                        if (option != null) poll.id to option else null
+                    }.toMap()
+                } else emptyMap()
+                _uiState.update { it.copy(polls = polls, votedPollOptions = it.votedPollOptions + voted) }
             }
         }
 
         viewModelScope.launch {
             codeSnippetDao.getSnippetsForUser(resolvedId).collect { snippets ->
-                val shown = if (snippets.isEmpty()) getMockSnippets(resolvedId) else snippets
+                val shown = if (snippets.isEmpty() && !isMe) getMockSnippets(resolvedId) else snippets
                 _uiState.update { it.copy(codeSnippets = shown) }
             }
         }
 
         viewModelScope.launch {
             techStackDao.getTechStackForUser(resolvedId).collect { items ->
-                val shown = if (items.isEmpty()) getMockTechStack(resolvedId) else items
+                val shown = if (items.isEmpty() && !isMe) getMockTechStack(resolvedId) else items
                 _uiState.update { it.copy(techStack = shown) }
             }
         }
@@ -274,26 +373,6 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch { moodBoardDao.upsertItem(withUser) }
     }
 
-    fun pinPost(post: Post) {
-        val userId = _uiState.value.user?.id ?: return
-        val current = _uiState.value.pinnedPosts
-        if (current.size >= 3) return
-        val pin = PinnedPost(
-            id = "pin_${userId}_${post.id}",
-            userId = userId,
-            postId = post.id,
-            pinOrder = current.size
-        )
-        _uiState.update { it.copy(pinnedPosts = it.pinnedPosts + post) }
-        viewModelScope.launch { pinnedPostDao.pinPost(pin) }
-    }
-
-    fun unpinPost(post: Post) {
-        val userId = _uiState.value.user?.id ?: return
-        _uiState.update { it.copy(pinnedPosts = it.pinnedPosts.filter { p -> p.id != post.id }) }
-        viewModelScope.launch { pinnedPostDao.unpinPost(post.id, userId) }
-    }
-
     fun goLive(title: String) {
         val userId = _uiState.value.liveStream.userId.ifEmpty {
             _uiState.value.user?.id ?: return
@@ -337,11 +416,179 @@ class ProfileViewModel @Inject constructor(
         _uiState.update { it.copy(user = user) }
         viewModelScope.launch {
             userDao.insertUser(user)
+            firebaseService.updateUser(
+                user.id,
+                mapOf(
+                    "displayName" to user.displayName,
+                    "username" to user.username,
+                    "bio" to user.bio,
+                    "location" to user.location,
+                    "website" to user.website,
+                    "mood" to user.mood,
+                    "aboutMe" to user.aboutMe,
+                    "heroesSection" to user.heroesSection,
+                    "interests" to user.interests,
+                    "profileSong" to user.profileSong,
+                    "profileSongArtist" to user.profileSongArtist
+                )
+            )
         }
     }
 
+    fun likePost(postId: String) {
+        val userId = authService.getCurrentUserId() ?: return
+        _uiState.update { s ->
+            s.copy(posts = s.posts.map { p ->
+                if (p.id == postId) {
+                    val nowLiked = !p.isLiked
+                    p.copy(
+                        isLiked = nowLiked,
+                        likesCount = if (nowLiked) p.likesCount + 1 else (p.likesCount - 1).coerceAtLeast(0)
+                    ).apply { likedBy = if (nowLiked) p.likedBy + userId else p.likedBy - userId }
+                } else p
+            })
+        }
+        viewModelScope.launch { firebaseService.likePost(postId, userId) }
+    }
+
+    fun reactToPost(postId: String, emoji: String) {
+        val userId = authService.getCurrentUserId() ?: return
+        fun toggle(posts: List<com.huabu.app.data.model.Post>) = posts.map { post ->
+            if (post.id != postId) post else {
+                val currentList = post.reactedBy[emoji]?.toMutableList() ?: mutableListOf()
+                val alreadyReacted = userId in currentList
+                if (alreadyReacted) currentList.remove(userId) else currentList.add(userId)
+                val newReactedBy = post.reactedBy.toMutableMap().also { it[emoji] = currentList }
+                post.also { it.reactedBy = newReactedBy; it.reactions = newReactedBy.mapValues { e -> e.value.size } }
+            }
+        }
+        _uiState.update { it.copy(posts = toggle(it.posts), pinnedPosts = toggle(it.pinnedPosts)) }
+        viewModelScope.launch { firebaseService.reactToPost(postId, userId, emoji) }
+    }
+
+    fun bookmarkPost(postId: String) {
+        val userId = authService.getCurrentUserId() ?: return
+        _uiState.update { s ->
+            s.copy(
+                posts = s.posts.map { if (it.id == postId) it.copy(isBookmarked = !it.isBookmarked) else it },
+                pinnedPosts = s.pinnedPosts.map { if (it.id == postId) it.copy(isBookmarked = !it.isBookmarked) else it }
+            )
+        }
+        viewModelScope.launch { firebaseService.toggleBookmark(userId, postId) }
+    }
+
+    fun loadSavedPosts() {
+        val userId = authService.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            firebaseService.getSavedPosts(userId).getOrNull()?.let { saved ->
+                _uiState.update { it.copy(savedPosts = saved) }
+            }
+        }
+    }
+
+    fun openComments(postId: String) {
+        _commentsState.value = ProfileCommentsState(postId = postId, isLoading = true)
+        viewModelScope.launch {
+            firebaseService.getCommentsFlow(postId)
+                .catch { _commentsState.update { it.copy(isLoading = false) } }
+                .collect { comments ->
+                    _commentsState.update { it.copy(comments = comments, isLoading = false) }
+                }
+        }
+    }
+
+    fun closeComments() {
+        _commentsState.value = ProfileCommentsState()
+    }
+
+    fun incrementPostField(postId: String, field: String) {
+        _uiState.update { s ->
+            s.copy(posts = s.posts.map { p ->
+                if (p.id == postId && field == "sharesCount") p.copy(sharesCount = p.sharesCount + 1) else p
+            })
+        }
+        viewModelScope.launch { firebaseService.incrementPostField(postId, field) }
+    }
+
+    fun commentPost(postId: String, content: String) {
+        val userId = authService.getCurrentUserId() ?: return
+        val user = _uiState.value.user
+        val comment = Comment(
+            postId = postId,
+            authorId = userId,
+            authorName = user?.displayName ?: "",
+            authorUsername = user?.username ?: "",
+            authorImageUrl = user?.profileImageUrl ?: "",
+            content = content
+        )
+        _uiState.update { s ->
+            s.copy(posts = s.posts.map { p ->
+                if (p.id == postId) p.copy(commentsCount = p.commentsCount + 1) else p
+            })
+        }
+        viewModelScope.launch { firebaseService.addComment(comment) }
+    }
+
+    fun togglePin(post: Post) {
+        val userId = authService.getCurrentUserId() ?: return
+        if (post.authorId != userId) return
+        val isPinned = _uiState.value.pinnedPosts.any { it.id == post.id }
+        if (isPinned) {
+            _uiState.update { s -> s.copy(pinnedPosts = s.pinnedPosts.filter { it.id != post.id }) }
+            viewModelScope.launch { firebaseService.unpinPost(userId, post.id) }
+        } else {
+            val order = _uiState.value.pinnedPosts.size
+            _uiState.update { s -> s.copy(pinnedPosts = s.pinnedPosts + post) }
+            viewModelScope.launch { firebaseService.pinPost(userId, post.id, order) }
+        }
+    }
+
+    fun blockUser() {
+        val currentUserId = authService.getCurrentUserId() ?: return
+        val profileUserId = _uiState.value.user?.id ?: return
+        val nowBlocked = !_uiState.value.isBlocked
+        _uiState.update { it.copy(isBlocked = nowBlocked) }
+        viewModelScope.launch {
+            if (nowBlocked) firebaseService.blockUser(currentUserId, profileUserId)
+            else firebaseService.unblockUser(currentUserId, profileUserId)
+        }
+    }
+
+    fun reportUser(reason: String) {
+        val currentUserId = authService.getCurrentUserId() ?: return
+        val profileUserId = _uiState.value.user?.id ?: return
+        viewModelScope.launch { firebaseService.reportUser(currentUserId, profileUserId, reason) }
+    }
+
+    fun deletePost(postId: String) {
+        val userId = authService.getCurrentUserId() ?: return
+        val post = _uiState.value.posts.find { it.id == postId } ?: return
+        if (post.authorId != userId) return
+        _uiState.update { it.copy(posts = it.posts.filter { p -> p.id != postId }) }
+        viewModelScope.launch { firebaseService.deletePost(postId, userId) }
+    }
+
     fun toggleFollow() {
-        _uiState.update { it.copy(isFollowing = !it.isFollowing) }
+        val currentUserId = authService.getCurrentUserId() ?: return
+        val profileUserId = _uiState.value.user?.id ?: return
+        val nowFollowing = !_uiState.value.isFollowing
+        _uiState.update { it.copy(isFollowing = nowFollowing) }
+        viewModelScope.launch {
+            firebaseService.updateFollowCounts(
+                followerId = currentUserId,
+                followingId = profileUserId,
+                isFollow = nowFollowing
+            )
+            if (nowFollowing) {
+                val me = firebaseService.getUser(currentUserId).getOrNull()
+                val senderName = me?.displayName ?: "Someone"
+                firebaseService.sendFollowNotification(
+                    toUserId = profileUserId,
+                    fromUserId = currentUserId,
+                    fromName = senderName
+                )
+            }
+        }
     }
 
     fun toggleWidget(toggle: (ProfileWidgetSettings) -> ProfileWidgetSettings) {
@@ -351,6 +598,28 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             profileWidgetSettingsDao.upsertSettings(updated)
         }
+    }
+
+    fun updateProfileBackgroundImage(uri: Uri) {
+        val userId = _uiState.value.user?.id ?: return
+        viewModelScope.launch {
+            // Upload to Firebase Storage
+            val path = "users/$userId/profile_bg_${System.currentTimeMillis()}.jpg"
+            val result = storageService.uploadImage(uri, path)
+            result.fold(
+                onSuccess = { downloadUrl ->
+                    // Update widget settings with new background URL
+                    toggleWidget { it.copy(backgroundImageUrl = downloadUrl) }
+                },
+                onFailure = { error ->
+                    android.util.Log.e("ProfileViewModel", "Failed to upload background: ${error.message}")
+                }
+            )
+        }
+    }
+
+    fun saveWidgetPositions(positionsJson: String) {
+        toggleWidget { it.copy(widgetPositions = positionsJson) }
     }
 
     private fun getMockUser(userId: String, isMe: Boolean): User = if (isMe) {
@@ -449,6 +718,78 @@ class ProfileViewModel @Inject constructor(
         MediaTrack("fi5", userId, MediaTrackType.FILM, "Dune", "Denis Villeneuve", "", "2021", 5)
     )
 
+    fun reorderMediaTrack(track: MediaTrack, moveUp: Boolean) {
+        val list = (if (track.type == MediaTrackType.MUSIC) _uiState.value.topMusic else _uiState.value.topFilms)
+            .sortedBy { it.rank }.toMutableList()
+        val idx = list.indexOfFirst { it.id == track.id }.takeIf { it >= 0 } ?: return
+        val swapIdx = if (moveUp) idx - 1 else idx + 1
+        if (swapIdx < 0 || swapIdx >= list.size) return
+        val updated = list.toMutableList()
+        val a = updated[idx].copy(rank = updated[swapIdx].rank)
+        val b = updated[swapIdx].copy(rank = updated[idx].rank)
+        updated[idx] = a; updated[swapIdx] = b
+        val newList = updated.sortedBy { it.rank }
+        if (track.type == MediaTrackType.MUSIC) _uiState.update { it.copy(topMusic = newList) }
+        else _uiState.update { it.copy(topFilms = newList) }
+        viewModelScope.launch { updated.forEach { mediaTrackDao.updateTrack(it) } }
+    }
+
+    fun reorderVideoLink(link: VideoLink, moveUp: Boolean) {
+        val list = _uiState.value.videoLinks.sortedBy { it.sortOrder }.toMutableList()
+        val idx = list.indexOfFirst { it.id == link.id }.takeIf { it >= 0 } ?: return
+        val swapIdx = if (moveUp) idx - 1 else idx + 1
+        if (swapIdx < 0 || swapIdx >= list.size) return
+        val a = list[idx].copy(sortOrder = list[swapIdx].sortOrder)
+        val b = list[swapIdx].copy(sortOrder = list[idx].sortOrder)
+        list[idx] = a; list[swapIdx] = b
+        _uiState.update { it.copy(videoLinks = list.sortedBy { v -> v.sortOrder }) }
+        viewModelScope.launch { listOf(a, b).forEach { videoLinkDao.updateVideoLink(it) } }
+    }
+
+    fun reorderPlaylistItem(item: PlaylistItem, moveUp: Boolean) {
+        val list = _uiState.value.playlist.sortedBy { it.sortOrder }.toMutableList()
+        val idx = list.indexOfFirst { it.id == item.id }.takeIf { it >= 0 } ?: return
+        val swapIdx = if (moveUp) idx - 1 else idx + 1
+        if (swapIdx < 0 || swapIdx >= list.size) return
+        val a = list[idx].copy(sortOrder = list[swapIdx].sortOrder)
+        val b = list[swapIdx].copy(sortOrder = list[idx].sortOrder)
+        list[idx] = a; list[swapIdx] = b
+        _uiState.update { it.copy(playlist = list.sortedBy { p -> p.sortOrder }) }
+        viewModelScope.launch { listOf(a, b).forEach { playlistItemDao.upsertItem(it) } }
+    }
+
+    fun reorderTechStackItem(item: TechStackItem, moveUp: Boolean) {
+        val list = _uiState.value.techStack.sortedBy { it.sortOrder }.toMutableList()
+        val idx = list.indexOfFirst { it.id == item.id }.takeIf { it >= 0 } ?: return
+        val swapIdx = if (moveUp) idx - 1 else idx + 1
+        if (swapIdx < 0 || swapIdx >= list.size) return
+        val a = list[idx].copy(sortOrder = list[swapIdx].sortOrder)
+        val b = list[swapIdx].copy(sortOrder = list[idx].sortOrder)
+        list[idx] = a; list[swapIdx] = b
+        _uiState.update { it.copy(techStack = list.sortedBy { t -> t.sortOrder }) }
+        viewModelScope.launch { listOf(a, b).forEach { techStackDao.upsertItem(it) } }
+    }
+
+    fun addMediaTrack(track: MediaTrack) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = track.copy(userId = userId)
+        viewModelScope.launch { mediaTrackDao.insertTrack(withUser) }
+    }
+
+    fun deleteMediaTrack(track: MediaTrack) {
+        viewModelScope.launch { mediaTrackDao.deleteTrack(track) }
+    }
+
+    fun addVideoLink(link: VideoLink) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = link.copy(userId = userId, sortOrder = _uiState.value.videoLinks.size)
+        viewModelScope.launch { videoLinkDao.insertVideoLink(withUser) }
+    }
+
+    fun deleteVideoLink(link: VideoLink) {
+        viewModelScope.launch { videoLinkDao.deleteVideoLink(link) }
+    }
+
     fun addPlaylistItem(item: PlaylistItem) {
         val userId = _uiState.value.user?.id ?: return
         val withUser = item.copy(userId = userId, sortOrder = _uiState.value.playlist.size)
@@ -493,29 +834,6 @@ class ProfileViewModel @Inject constructor(
 
     fun deleteNft(nft: NftItem) {
         viewModelScope.launch { nftItemDao.deleteNft(nft.id) }
-    }
-
-    fun createPoll(poll: ProfilePoll) {
-        val userId = _uiState.value.user?.id ?: return
-        val withUser = poll.copy(userId = userId)
-        viewModelScope.launch { profilePollDao.upsertPoll(withUser) }
-    }
-
-    fun deletePoll(poll: ProfilePoll) {
-        viewModelScope.launch { profilePollDao.deletePoll(poll.id) }
-    }
-
-    fun voteOnPoll(pollId: String, option: Char) {
-        val userId = _uiState.value.user?.id ?: return
-        viewModelScope.launch {
-            profilePollDao.recordVote(PollVote(pollId, userId, option))
-            when (option) {
-                'A' -> profilePollDao.voteA(pollId)
-                'B' -> profilePollDao.voteB(pollId)
-                'C' -> profilePollDao.voteC(pollId)
-                'D' -> profilePollDao.voteD(pollId)
-            }
-        }
     }
 
     fun addCodeSnippet(snippet: CodeSnippet) {
@@ -667,7 +985,9 @@ class ProfileViewModel @Inject constructor(
                     ))
                 }
                 GameType2P.MINESWEEPER -> {
-                    // TODO: Minesweeper join logic
+                    val userId   = _uiState.value.user?.id ?: return@launch
+                    val userName = _uiState.value.user?.displayName ?: "Opponent"
+                    minesweeperDao.joinGame(invite.gameId, userId, userName)
                 }
             }
         }
@@ -743,4 +1063,149 @@ class ProfileViewModel @Inject constructor(
         Badge("creator",         userId, "Creator",         "🎨", "Shared original creative content",     BadgeRarity.EPIC),
         Badge("popular",         userId, "Popular",         "💫", "Post with 50+ likes",                  BadgeRarity.EPIC),
     )
+
+    // ── Polls ──────────────────────────────────────────────
+
+    fun loadPolls(userId: String) {
+        viewModelScope.launch {
+            val polls = firebaseService.getPollsForUser(userId).getOrDefault(emptyList())
+            _uiState.update { it.copy(polls = polls) }
+        }
+    }
+
+    fun createPoll(poll: ProfilePoll) {
+        val userId = authService.getCurrentUserId() ?: return
+        viewModelScope.launch {
+            val id = firebaseService.createPoll(userId, poll).getOrNull() ?: return@launch
+            val saved = poll.copy(id = id)
+            _uiState.update { it.copy(polls = listOf(saved) + it.polls) }
+        }
+    }
+
+    fun deletePoll(poll: ProfilePoll) {
+        val userId = authService.getCurrentUserId() ?: return
+        _uiState.update { it.copy(polls = it.polls.filter { p -> p.id != poll.id }) }
+        viewModelScope.launch { firebaseService.deletePoll(userId, poll.id) }
+    }
+
+    fun voteOnPoll(pollId: String, option: Char) {
+        val voterId = authService.getCurrentUserId() ?: return
+        if (_uiState.value.votedPollOptions.containsKey(pollId)) return
+        val ownerId = _uiState.value.user?.id ?: return
+        val upperOption = option.uppercaseChar()
+        _uiState.update { s ->
+            s.copy(
+                polls = s.polls.map { p ->
+                    if (p.id != pollId) p else when (upperOption) {
+                        'A' -> p.copy(votesA = p.votesA + 1)
+                        'B' -> p.copy(votesB = p.votesB + 1)
+                        'C' -> p.copy(votesC = p.votesC + 1)
+                        'D' -> p.copy(votesD = p.votesD + 1)
+                        else -> p
+                    }
+                },
+                votedPollOptions = s.votedPollOptions + (pollId to upperOption)
+            )
+        }
+        viewModelScope.launch {
+            profilePollDao.recordVote(PollVote(pollId = pollId, voterId = voterId, option = upperOption))
+            when (upperOption) {
+                'A' -> profilePollDao.voteA(pollId)
+                'B' -> profilePollDao.voteB(pollId)
+                'C' -> profilePollDao.voteC(pollId)
+                'D' -> profilePollDao.voteD(pollId)
+            }
+            firebaseService.voteOnPoll(ownerId, pollId, upperOption, voterId)
+        }
+    }
+
+    // ── Pinned post aliases (used by PinnedPostsWidget) ────
+
+    fun pinPost(post: Post) {
+        val userId = authService.getCurrentUserId() ?: return
+        val order = _uiState.value.pinnedPosts.size
+        _uiState.update { s -> s.copy(pinnedPosts = (s.pinnedPosts + post).distinctBy { it.id }) }
+        viewModelScope.launch { firebaseService.pinPost(userId, post.id, order) }
+    }
+
+    fun unpinPost(post: Post) {
+        val userId = authService.getCurrentUserId() ?: return
+        _uiState.update { s -> s.copy(pinnedPosts = s.pinnedPosts.filter { it.id != post.id }) }
+        viewModelScope.launch { firebaseService.unpinPost(userId, post.id) }
+    }
+
+    fun createMinesweeperGame(opponentId: String, opponentName: String) {
+        val userId   = _uiState.value.user?.id ?: return
+        val userName = _uiState.value.user?.displayName ?: "You"
+        val gameId   = "ms_${System.currentTimeMillis()}"
+        viewModelScope.launch {
+            val (hostGrid, hostMines) = MinesweeperGame.generateGrid(9, 9, 10)
+            val (oppGrid,  oppMines)  = MinesweeperGame.generateGrid(9, 9, 10)
+            minesweeperDao.upsertGame(
+                MinesweeperGame(
+                    id            = gameId,
+                    hostId        = userId,
+                    opponentId    = opponentId,
+                    hostName      = userName,
+                    opponentName  = opponentName,
+                    hostGrid      = hostGrid,
+                    hostMines     = hostMines,
+                    opponentGrid  = oppGrid,
+                    opponentMines = oppMines,
+                    status        = GameStatus.WAITING
+                )
+            )
+            gameInviteDao.sendInvite(GameInvite(
+                id           = "invite_ms_${System.currentTimeMillis()}",
+                gameType     = GameType2P.MINESWEEPER,
+                gameId       = gameId,
+                fromUserId   = userId,
+                fromUserName = userName,
+                toUserId     = opponentId,
+                toUserName   = opponentName,
+                message      = "Want to race at Minesweeper?"
+            ))
+        }
+    }
+
+    fun addPhoto(photo: ProfilePhoto) {
+        val userId = _uiState.value.user?.id ?: return
+        val withUser = photo.copy(userId = userId, sortOrder = _uiState.value.photos.size)
+        viewModelScope.launch { profilePhotoDao.insertPhoto(withUser) }
+    }
+
+    fun uploadAndAddPhoto(uri: Uri, caption: String) {
+        val userId = _uiState.value.user?.id ?: return
+        viewModelScope.launch {
+            val path = "users/$userId/photos/photo_${System.currentTimeMillis()}.jpg"
+            val result = storageService.uploadImage(uri, path)
+            result.onSuccess { downloadUrl ->
+                val photo = ProfilePhoto(
+                    id = "photo_${System.currentTimeMillis()}",
+                    userId = userId,
+                    imageUrl = downloadUrl,
+                    caption = caption,
+                    sortOrder = _uiState.value.photos.size
+                )
+                profilePhotoDao.insertPhoto(photo)
+            }
+        }
+    }
+
+    fun deletePhoto(photo: ProfilePhoto) {
+        viewModelScope.launch { profilePhotoDao.deletePhotoById(photo.id) }
+    }
+
+    fun updatePhotoFrame(photo: ProfilePhoto, newFrame: PhotoFrameStyle) {
+        viewModelScope.launch {
+            profilePhotoDao.updatePhoto(photo.copy(frameStyle = newFrame))
+        }
+    }
+
+    // ── Profile view counter ───────────────────────────────
+
+    fun recordProfileView(profileUserId: String) {
+        val viewerId = authService.getCurrentUserId() ?: return
+        viewModelScope.launch { firebaseService.incrementProfileView(profileUserId, viewerId) }
+    }
 }

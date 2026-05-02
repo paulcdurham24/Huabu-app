@@ -46,7 +46,7 @@ import com.huabu.app.data.model.*
         Conversation::class,
         Notification::class
     ],
-    version = 12,
+    version = 16,
     exportSchema = false
 )
 abstract class HuabuDatabase : RoomDatabase() {

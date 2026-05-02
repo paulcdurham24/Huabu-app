@@ -1,5 +1,7 @@
 package com.huabu.app.ui.screens.profile
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +38,7 @@ import com.huabu.app.ui.theme.*
 fun SpotifyNowPlayingWidget(
     track: SpotifyTrack?,
     isCurrentUser: Boolean,
+    userId: String = "",
     onSetTrack: (SpotifyTrack) -> Unit,
     onClear: () -> Unit
 ) {
@@ -68,6 +72,7 @@ fun SpotifyNowPlayingWidget(
     if (showEditor) {
         SpotifyEditorDialog(
             existing = track,
+            userId = userId,
             onSave = { showEditor = false; onSetTrack(it) },
             onDismiss = { showEditor = false }
         )
@@ -81,8 +86,14 @@ private fun SpotifyTrackCard(
     onEdit: () -> Unit,
     onClear: () -> Unit
 ) {
+    val context = LocalContext.current
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val query = Uri.encode("${track.title} ${track.artist}")
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://music.youtube.com/search?q=$query"))) }
+            },
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -144,6 +155,7 @@ private fun SpotifyTrackCard(
 @Composable
 private fun SpotifyEditorDialog(
     existing: SpotifyTrack?,
+    userId: String = "",
     onSave: (SpotifyTrack) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -208,8 +220,8 @@ private fun SpotifyEditorDialog(
                 onClick = {
                     if (title.isNotBlank() && artist.isNotBlank()) {
                         onSave(SpotifyTrack(
-                            id = existing?.id ?: "spotify_${System.currentTimeMillis()}",
-                            userId = "",
+                            id = existing?.id ?: "spotify_$userId",
+                            userId = userId,
                             title = title.trim(),
                             artist = artist.trim(),
                             album = album.trim().ifEmpty { "Unknown Album" },

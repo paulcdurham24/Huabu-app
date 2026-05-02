@@ -15,5 +15,6 @@ data class NftItem(
     val priceEth: Float = 0f,
     val lastSaleEth: Float = 0f,
     val imageUrl: String = "",
+    val openseaUrl: String = "",
     val acquiredAt: Long = System.currentTimeMillis()
 )

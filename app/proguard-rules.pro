@@ -45,3 +45,16 @@
 # Compose
 -keep class androidx.compose.** { *; }
 -dontwarn androidx.compose.**
+
+# Firebase
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+
+# Remote API response models (Gson deserialisation)
+-keep class com.huabu.app.data.remote.** { *; }
+
+# Kotlin serialization metadata
+-keepattributes RuntimeVisibleAnnotations
+-keepattributes AnnotationDefault

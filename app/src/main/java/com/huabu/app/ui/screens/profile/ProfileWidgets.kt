@@ -1,12 +1,23 @@
 package com.huabu.app.ui.screens.profile
 
+import androidx.compose.runtime.compositionLocalOf
+import com.huabu.app.data.model.ProfileTheme
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,6 +26,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -26,6 +38,11 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.huabu.app.data.model.*
 import com.huabu.app.ui.theme.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 
 // ─────────────────────────────────────────────
 // Photo Gallery Widget
@@ -36,8 +53,12 @@ fun PhotoGalleryWidget(
     photos: List<ProfilePhoto>,
     isCurrentUser: Boolean,
     onPhotoClick: (ProfilePhoto) -> Unit,
-    onFrameChange: (ProfilePhoto, PhotoFrameStyle) -> Unit
+    onFrameChange: (ProfilePhoto, PhotoFrameStyle) -> Unit,
+    onAddPhoto: (Uri, String) -> Unit = { _, _ -> },
+    onDeletePhoto: (ProfilePhoto) -> Unit = {}
 ) {
+    var showAddDialog by remember { mutableStateOf(false) }
+
     WidgetCard(title = "★ My Photos ★", titleColor = HuabuCoral) {
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -48,24 +69,38 @@ fun PhotoGalleryWidget(
                     photo = photo,
                     isCurrentUser = isCurrentUser,
                     onClick = { onPhotoClick(photo) },
-                    onFrameChange = { style -> onFrameChange(photo, style) }
+                    onFrameChange = { style -> onFrameChange(photo, style) },
+                    onDelete = { onDeletePhoto(photo) }
                 )
             }
             if (isCurrentUser) {
-                item { AddPhotoButton() }
+                item { AddPhotoButton(onClick = { showAddDialog = true }) }
             }
         }
     }
+
+    if (showAddDialog) {
+        AddPhotoDialog(
+            onAdd = { uri, caption ->
+                showAddDialog = false
+                onAddPhoto(uri, caption)
+            },
+            onDismiss = { showAddDialog = false }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PhotoItem(
     photo: ProfilePhoto,
     isCurrentUser: Boolean,
     onClick: () -> Unit,
-    onFrameChange: (PhotoFrameStyle) -> Unit
+    onFrameChange: (PhotoFrameStyle) -> Unit,
+    onDelete: () -> Unit = {}
 ) {
     var showFramePicker by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
@@ -73,7 +108,10 @@ private fun PhotoItem(
                 .size(100.dp)
                 .then(frameModifier(photo.frameStyle))
                 .clip(RoundedCornerShape(12.dp))
-                .clickable { onClick() }
+                .combinedClickable(
+                    onClick = { onClick() },
+                    onLongClick = { if (isCurrentUser) showDeleteConfirm = true }
+                )
         ) {
             if (photo.imageUrl.isNotEmpty()) {
                 AsyncImage(
@@ -138,18 +176,36 @@ private fun PhotoItem(
                 onDismiss = { showFramePicker = false }
             )
         }
+
+        if (showDeleteConfirm) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirm = false },
+                containerColor = HuabuCardBg,
+                title = { Text("Remove photo?", color = HuabuOnSurface, fontWeight = FontWeight.Bold) },
+                confirmButton = {
+                    Button(
+                        onClick = { showDeleteConfirm = false; onDelete() },
+                        colors = ButtonDefaults.buttonColors(containerColor = HuabuError),
+                        shape = RoundedCornerShape(20.dp)
+                    ) { Text("Remove") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel", color = HuabuSilver) }
+                }
+            )
+        }
     }
 }
 
 @Composable
-private fun AddPhotoButton() {
+private fun AddPhotoButton(onClick: () -> Unit = {}) {
     Box(
         modifier = Modifier
             .size(100.dp)
             .clip(RoundedCornerShape(12.dp))
             .border(2.dp, HuabuViolet, RoundedCornerShape(12.dp))
             .background(HuabuCardBg)
-            .clickable { },
+            .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -157,6 +213,78 @@ private fun AddPhotoButton() {
             Text("Add", style = MaterialTheme.typography.labelSmall, color = HuabuViolet)
         }
     }
+}
+
+@Composable
+private fun AddPhotoDialog(
+    onAdd: (Uri, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var caption    by remember { mutableStateOf("") }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = PickVisualMedia()
+    ) { uri -> uri?.let { selectedUri = it } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = HuabuCardBg,
+        title = { Text("📷 Add Photo", color = HuabuCoral, fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Image preview / pick button
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(HuabuSurface)
+                        .border(1.dp, if (selectedUri != null) HuabuCoral else HuabuDivider, RoundedCornerShape(12.dp))
+                        .clickable { galleryLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selectedUri != null) {
+                        AsyncImage(
+                            model = selectedUri,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Filled.AddPhotoAlternate, contentDescription = null, tint = HuabuCoral, modifier = Modifier.size(36.dp))
+                            Text("Tap to choose from gallery", color = HuabuSilver, fontSize = 12.sp)
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = caption, onValueChange = { caption = it },
+                    label = { Text("Caption (optional)", color = HuabuSilver) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = HuabuCoral, unfocusedBorderColor = HuabuDivider,
+                        focusedTextColor = HuabuOnSurface, unfocusedTextColor = HuabuOnSurface,
+                        cursorColor = HuabuCoral
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { selectedUri?.let { onAdd(it, caption.trim()) } },
+                enabled = selectedUri != null,
+                colors = ButtonDefaults.buttonColors(containerColor = HuabuCoral),
+                shape = RoundedCornerShape(20.dp)
+            ) { Text("Upload") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = HuabuSilver) } }
+    )
 }
 
 @Composable
@@ -236,182 +364,6 @@ private fun PhotoFrameStyle.label(): String = when (this) {
     PhotoFrameStyle.GLITTER_SILVER -> "Glitter Silver"
 }
 
-// ─────────────────────────────────────────────
-// Video Links Widget
-// ─────────────────────────────────────────────
-
-@Composable
-fun VideoLinksWidget(
-    videos: List<VideoLink>,
-    isCurrentUser: Boolean
-) {
-    WidgetCard(title = "★ My Videos ★", titleColor = HuabuSkyBlue) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            videos.forEach { video ->
-                VideoLinkItem(video = video)
-            }
-            if (isCurrentUser) {
-                OutlinedButton(
-                    onClick = {},
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = HuabuSkyBlue)
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Add Video Link")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun VideoLinkItem(video: VideoLink) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(HuabuCardBg2)
-            .clickable { }
-            .padding(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(60.dp, 44.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Brush.radialGradient(listOf(HuabuDeepPurple, HuabuCardBg))),
-            contentAlignment = Alignment.Center
-        ) {
-            if (video.thumbnailUrl.isNotEmpty()) {
-                AsyncImage(
-                    model = video.thumbnailUrl,
-                    contentDescription = video.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .background(Color.Black.copy(alpha = 0.55f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(18.dp))
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = video.title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = HuabuOnSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (video.description.isNotEmpty()) {
-                Text(
-                    text = video.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = HuabuSilver,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-        Icon(Icons.Filled.Launch, contentDescription = "Open", tint = HuabuSkyBlue, modifier = Modifier.size(16.dp))
-    }
-}
-
-// ─────────────────────────────────────────────
-// Top 5 Music / Films Widgets
-// ─────────────────────────────────────────────
-
-@Composable
-fun TopMusicWidget(tracks: List<MediaTrack>, isCurrentUser: Boolean) {
-    WidgetCard(title = "★ Top 5 Tracks ★", titleColor = HuabuLime) {
-        MediaTrackList(tracks = tracks, isCurrentUser = isCurrentUser, icon = "🎵")
-    }
-}
-
-@Composable
-fun TopFilmsWidget(tracks: List<MediaTrack>, isCurrentUser: Boolean) {
-    WidgetCard(title = "★ Top 5 Films ★", titleColor = HuabuCoral) {
-        MediaTrackList(tracks = tracks, isCurrentUser = isCurrentUser, icon = "🎬")
-    }
-}
-
-@Composable
-private fun MediaTrackList(tracks: List<MediaTrack>, isCurrentUser: Boolean, icon: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        tracks.take(5).forEachIndexed { index, track ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(HuabuCardBg2)
-                    .padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "#${index + 1}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = HuabuGold,
-                    modifier = Modifier.width(28.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Brush.radialGradient(listOf(HuabuSurface, HuabuCardBg))),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (track.artworkUrl.isNotEmpty()) {
-                        AsyncImage(
-                            model = track.artworkUrl,
-                            contentDescription = track.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Text(icon, fontSize = 20.sp)
-                    }
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = track.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = HuabuOnSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = buildString {
-                            append(track.subtitle)
-                            if (track.year.isNotEmpty()) append("  •  ${track.year}")
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = HuabuSilver,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-        if (isCurrentUser) {
-            TextButton(onClick = {}, modifier = Modifier.align(Alignment.End)) {
-                Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = HuabuSilver)
-                Spacer(Modifier.width(4.dp))
-                Text("Edit", color = HuabuSilver, style = MaterialTheme.typography.labelMedium)
-            }
-        }
-    }
-}
 
 // ─────────────────────────────────────────────
 // Widget Toggle + Drag-to-Reorder Settings Panel
@@ -442,6 +394,9 @@ private val ALL_WIDGETS = listOf(
     WidgetDef("code_snippets",      "Code Snippets",     "💻"),
     WidgetDef("tech_stack",         "Tech Stack",        "🛠️"),
     WidgetDef("gif_showcase",       "GIF Showcase",      "🎬"),
+    WidgetDef("gif_showcase_1",     "GIF Box 1",         "🎬"),
+    WidgetDef("gif_showcase_2",     "GIF Box 2",         "🎬"),
+    WidgetDef("gif_showcase_3",     "GIF Box 3",         "🎬"),
     WidgetDef("spotify_now_playing","Spotify Now Playing","🎵"),
     WidgetDef("meme_wall",          "Meme Wall",         "😂"),
     WidgetDef("game_stats",         "Game Stats",        "🎮"),
@@ -454,8 +409,11 @@ private val ALL_WIDGETS = listOf(
 fun WidgetSettingsPanel(
     settings: ProfileWidgetSettings,
     onToggle: ((ProfileWidgetSettings) -> ProfileWidgetSettings) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onBackgroundImageSelected: ((android.net.Uri) -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    var showBgImagePicker by remember { mutableStateOf(false) }
     val orderedIds = remember(settings.widgetOrder) {
         val saved = settings.orderedWidgetIds()
         val all = ALL_WIDGETS.map { it.id }
@@ -497,7 +455,9 @@ fun WidgetSettingsPanel(
         },
         text = {
             Column(
-                modifier = Modifier.heightIn(max = 440.dp),
+                modifier = Modifier
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 orderedIds.forEachIndexed { index, widgetId ->
@@ -577,6 +537,9 @@ fun WidgetSettingsPanel(
                                         "code_snippets"      -> s.copy(showCodeSnippets     = !s.showCodeSnippets)
                                         "tech_stack"         -> s.copy(showTechStack        = !s.showTechStack)
                                         "gif_showcase"       -> s.copy(showGifShowcase      = !s.showGifShowcase)
+                                        "gif_showcase_1"     -> s.copy(showGifShowcase1     = !s.showGifShowcase1)
+                                        "gif_showcase_2"     -> s.copy(showGifShowcase2     = !s.showGifShowcase2)
+                                        "gif_showcase_3"     -> s.copy(showGifShowcase3     = !s.showGifShowcase3)
                                         "spotify_now_playing"-> s.copy(showSpotifyNowPlaying= !s.showSpotifyNowPlaying)
                                         "meme_wall"          -> s.copy(showMemeWall         = !s.showMemeWall)
                                         "game_stats"         -> s.copy(showGameStats        = !s.showGameStats)
@@ -596,6 +559,60 @@ fun WidgetSettingsPanel(
                         )
                     }
                 }
+
+                // Background Image Section
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = HuabuDivider)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text("🖼️ Background Image", color = HuabuGold, fontWeight = FontWeight.Bold)
+
+                if (settings.backgroundImageUrl.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    ) {
+                        AsyncImage(
+                            model = settings.backgroundImageUrl,
+                            contentDescription = "Background preview",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        // Remove button
+                        IconButton(
+                            onClick = { onToggle { it.copy(backgroundImageUrl = "") } },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(32.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = { showBgImagePicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = HuabuCardBg2),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.Image, contentDescription = null, tint = HuabuViolet)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(if (settings.backgroundImageUrl.isEmpty()) "Add Background Image" else "Change Background", color = HuabuOnSurface)
+                }
+
+                if (showBgImagePicker && onBackgroundImageSelected != null) {
+                    BackgroundImagePickerDialog(
+                        onImageSelected = { uri ->
+                            showBgImagePicker = false
+                            onBackgroundImageSelected(uri)
+                        },
+                        onDismiss = { showBgImagePicker = false }
+                    )
+                }
             }
         },
         confirmButton = {
@@ -607,9 +624,76 @@ fun WidgetSettingsPanel(
     )
 }
 
+// Background Image Picker Dialog
+@Composable
+private fun BackgroundImagePickerDialog(
+    onImageSelected: (android.net.Uri) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    fun copyUriToCache(uri: android.net.Uri): android.net.Uri? {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+            val cacheDir = File(context.cacheDir, "background_picker")
+            cacheDir.mkdirs()
+            val file = File(cacheDir, "bg_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { output ->
+                inputStream.copyTo(output)
+            }
+            inputStream.close()
+            android.net.Uri.fromFile(file)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri ->
+            uri?.let { originalUri ->
+                scope.launch {
+                    val cachedUri = withContext(Dispatchers.IO) {
+                        copyUriToCache(originalUri)
+                    }
+                    cachedUri?.let { onImageSelected(it) }
+                }
+            }
+        }
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = HuabuCardBg,
+        title = { Text("🖼️ Select Background", color = HuabuGold, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Choose an image for your profile background.", color = HuabuSilver)
+
+                Button(
+                    onClick = { launcher.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = HuabuViolet),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Pick from Gallery")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = HuabuSilver) }
+        }
+    )
+}
+
 // ─────────────────────────────────────────────
 // Shared widget card shell
 // ─────────────────────────────────────────────
+
+val LocalProfileTheme = compositionLocalOf { ProfileTheme("") }
 
 @Composable
 fun WidgetCard(
@@ -618,18 +702,25 @@ fun WidgetCard(
     action: @Composable (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val theme = LocalProfileTheme.current
+    val cardColor = try {
+        Color(android.graphics.Color.parseColor(theme.cardColor))
+    } catch (_: Exception) { HuabuCardBg }
+    val cardColor2 = try {
+        Color(android.graphics.Color.parseColor(theme.cardColor)).copy(alpha = 0.85f)
+    } catch (_: Exception) { HuabuCardBg2 }
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = HuabuCardBg),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(HuabuCardBg, HuabuCardBg2)))
+                .background(Brush.verticalGradient(listOf(cardColor, cardColor2)))
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {

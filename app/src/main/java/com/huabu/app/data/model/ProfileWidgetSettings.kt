@@ -3,7 +3,7 @@ package com.huabu.app.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-const val DEFAULT_WIDGET_ORDER = "go_live,events,badges,pinned_posts,mood_board,nft_showcase,polls,code_snippets,tech_stack,gif_showcase,spotify_now_playing,meme_wall,game_stats,visited_places,travel_wishlist,multiplayer_games,recently_played,my_playlist,currently_reading,currently_watching,photo_gallery,video_links,top_music,top_films,profile_song,about_me,interests,top_friends"
+const val DEFAULT_WIDGET_ORDER = "go_live,events,badges,pinned_posts,mood_board,nft_showcase,polls,code_snippets,tech_stack,gif_showcase,gif_showcase_1,gif_showcase_2,gif_showcase_3,spotify_now_playing,meme_wall,game_stats,visited_places,travel_wishlist,multiplayer_games,recently_played,my_playlist,currently_reading,currently_watching,photo_gallery,video_links,top_music,top_films,profile_song,about_me,interests,top_friends"
 
 @Entity(tableName = "profile_widget_settings")
 data class ProfileWidgetSettings(
@@ -38,7 +38,16 @@ data class ProfileWidgetSettings(
     val showMultiplayerGames: Boolean = true,
     val showMood: Boolean = true,
     val showLocation: Boolean = true,
-    val widgetOrder: String = DEFAULT_WIDGET_ORDER
+    // 3 separate GIF showcase boxes for independent positioning
+    val showGifShowcase1: Boolean = true,
+    val showGifShowcase2: Boolean = false,
+    val showGifShowcase3: Boolean = false,
+    val widgetOrder: String = DEFAULT_WIDGET_ORDER,
+    // Widget positioning and sizing (JSON strings)
+    val widgetPositions: String = "", // {"widgetId": {"x": 0.0, "y": 0.0}, ...}
+    val widgetSizes: String = "",     // {"widgetId": {"width": 1.0, "height": 0.3}, ...}
+    val useGridLayout: Boolean = false, // false = freeform positioning, true = list layout
+    val backgroundImageUrl: String = "" // Custom profile background image
 ) {
     fun orderedWidgetIds(): List<String> =
         widgetOrder.split(",").map { it.trim() }.filter { it.isNotEmpty() }
@@ -66,6 +75,9 @@ data class ProfileWidgetSettings(
         "code_snippets"      -> showCodeSnippets
         "tech_stack"         -> showTechStack
         "gif_showcase"       -> showGifShowcase
+        "gif_showcase_1"     -> showGifShowcase1
+        "gif_showcase_2"     -> showGifShowcase2
+        "gif_showcase_3"     -> showGifShowcase3
         "spotify_now_playing"-> showSpotifyNowPlaying
         "meme_wall"          -> showMemeWall
         "game_stats"         -> showGameStats
@@ -73,5 +85,45 @@ data class ProfileWidgetSettings(
         "travel_wishlist"    -> showTravelWishlist
         "multiplayer_games"  -> showMultiplayerGames
         else                 -> true
+    }
+
+    data class WidgetPosition(val x: Float, val y: Float)
+    data class WidgetSize(val width: Float, val height: Float)
+
+    fun getWidgetPosition(widgetId: String, index: Int): WidgetPosition {
+        return try {
+            val json = org.json.JSONObject(widgetPositions)
+            val pos = json.optJSONObject(widgetId)
+            if (pos != null) {
+                WidgetPosition(
+                    x = pos.optDouble("x", 0.0).toFloat(),
+                    y = pos.optDouble("y", index * 0.15).toFloat()
+                )
+            } else {
+                // Default grid position
+                val row = index / 2
+                val col = index % 2
+                WidgetPosition(x = col * 0.5f, y = row * 0.2f)
+            }
+        } catch (e: Exception) {
+            WidgetPosition(x = 0f, y = index * 0.15f)
+        }
+    }
+
+    fun getWidgetSize(widgetId: String): WidgetSize {
+        return try {
+            val json = org.json.JSONObject(widgetSizes)
+            val size = json.optJSONObject(widgetId)
+            if (size != null) {
+                WidgetSize(
+                    width = size.optDouble("width", 1.0).toFloat(),
+                    height = size.optDouble("height", 0.3).toFloat()
+                )
+            } else {
+                WidgetSize(width = 1f, height = 0.3f)
+            }
+        } catch (e: Exception) {
+            WidgetSize(width = 1f, height = 0.3f)
+        }
     }
 }

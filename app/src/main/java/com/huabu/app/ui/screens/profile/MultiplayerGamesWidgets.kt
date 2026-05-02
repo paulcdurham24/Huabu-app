@@ -46,6 +46,7 @@ fun MultiplayerGamesWidget(
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     var selectedGame by remember { mutableStateOf<TicTacToeGame?>(null) }
+    var selectedMsGame by remember { mutableStateOf<MinesweeperGame?>(null) }
 
     WidgetCard(
         title = "🎮 Multiplayer Games",
@@ -110,7 +111,25 @@ fun MultiplayerGamesWidget(
                 }
             }
 
-            if (ticTacToeGames.isEmpty() && pendingInvites.isEmpty()) {
+            // Active Minesweeper Games
+            val activeMsGames = minesweeperGames.filter { it.status == GameStatus.ACTIVE }
+            if (activeMsGames.isNotEmpty()) {
+                Text(
+                    "💣 Minesweeper (${activeMsGames.size})",
+                    color = Color(0xFFE74C3C),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                activeMsGames.take(2).forEach { msGame ->
+                    MinesweeperGameCard(
+                        game = msGame,
+                        userId = userId,
+                        onClick = { selectedMsGame = msGame }
+                    )
+                }
+            }
+
+            if (ticTacToeGames.isEmpty() && minesweeperGames.isEmpty() && pendingInvites.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -146,13 +165,22 @@ fun MultiplayerGamesWidget(
         )
     }
 
-    // Play Game Dialog
+    // Tic Tac Toe Play Dialog
     selectedGame?.let { game ->
         TicTacToePlayDialog(
             game = game,
             userId = userId,
             onMakeMove = { row, col -> onMakeMove(game.id, row, col) },
             onDismiss = { selectedGame = null }
+        )
+    }
+
+    // Minesweeper Play Dialog
+    selectedMsGame?.let { game ->
+        MinesweeperPlayDialog(
+            game = game,
+            userId = userId,
+            onDismiss = { selectedMsGame = null }
         )
     }
 }
@@ -590,6 +618,247 @@ private fun TicTacToePlayDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(if (game.status == GameStatus.FINISHED) "Close" else "Exit Game", color = HuabuSilver)
+            }
+        }
+    )
+}
+
+// ─────────────────────────────────────────────
+// MINESWEEPER GAME CARD
+// ─────────────────────────────────────────────
+
+@Composable
+private fun MinesweeperGameCard(
+    game: MinesweeperGame,
+    userId: String,
+    onClick: () -> Unit
+) {
+    val isHost = game.hostId == userId
+    val opponentName = if (isHost) game.opponentName else game.hostName
+    val mineColor = Color(0xFFE74C3C)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(HuabuCardBg2)
+            .border(1.dp, mineColor.copy(0.3f), RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(mineColor.copy(0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("💣", fontSize = 20.sp)
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "vs $opponentName",
+                color = HuabuOnSurface,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp
+            )
+            Text(
+                "${game.rows}×${game.cols} · ${game.mineCount} mines",
+                color = HuabuSilver,
+                fontSize = 11.sp
+            )
+        }
+
+        Text(
+            "Play",
+            color = mineColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+// ─────────────────────────────────────────────
+// MINESWEEPER PLAY DIALOG
+// ─────────────────────────────────────────────
+
+@Composable
+private fun MinesweeperPlayDialog(
+    game: MinesweeperGame,
+    userId: String,
+    onDismiss: () -> Unit
+) {
+    val isHost = game.hostId == userId
+    val gridStr = if (isHost) game.hostGrid else game.opponentGrid
+    val minesStr = if (isHost) game.hostMines else game.opponentMines
+    val revealedStr = if (isHost) game.hostRevealed else game.opponentRevealed
+
+    val cells = remember(gridStr) {
+        if (gridStr.isBlank()) emptyList() else gridStr.split(",")
+    }
+    val mineIndices: Set<Int> = remember(minesStr) {
+        if (minesStr.isBlank()) emptySet() else minesStr.split(",").mapNotNull { it.toIntOrNull() }.toSet()
+    }
+    var revealed by remember(revealedStr) {
+        mutableStateOf<Set<Int>>(
+            if (revealedStr.isBlank()) emptySet() else revealedStr.split(",").mapNotNull { it.toIntOrNull() }.toSet()
+        )
+    }
+    var flagged by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var gameOver by remember { mutableStateOf(false) }
+    var hitMine by remember { mutableStateOf(false) }
+
+    val cols = game.cols
+    val rows = game.rows
+    val opponentName = if (isHost) game.opponentName else game.hostName
+
+    fun revealCell(idx: Int) {
+        if (gameOver || idx in revealed || idx in flagged) return
+        if (idx in mineIndices) {
+            revealed = revealed + mineIndices
+            hitMine = true
+            gameOver = true
+            return
+        }
+        val queue = ArrayDeque<Int>()
+        queue.add(idx)
+        var cur = revealed
+        while (queue.isNotEmpty()) {
+            val i = queue.removeFirst()
+            if (i in cur) continue
+            cur = cur + i
+            val cellVal = cells.getOrNull(i)?.substringAfter(":") ?: continue
+            if (cellVal == "0") {
+                val r = i / cols; val c = i % cols
+                for (dr in -1..1) for (dc in -1..1) {
+                    if (dr == 0 && dc == 0) continue
+                    val nr = r + dr; val nc = c + dc
+                    if (nr in 0 until rows && nc in 0 until cols) {
+                        val ni = nr * cols + nc
+                        if (ni !in cur && ni !in mineIndices) queue.add(ni)
+                    }
+                }
+            }
+        }
+        revealed = cur
+        val nonMineCells = (0 until rows * cols).count { it !in mineIndices }
+        if (revealed.count { it !in mineIndices } >= nonMineCells) gameOver = true
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = HuabuCardBg,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("💣", fontSize = 20.sp)
+                Column {
+                    Text("Minesweeper", color = Color(0xFFE74C3C), fontWeight = FontWeight.ExtraBold)
+                    Text("vs $opponentName · ${mineIndices.size} mines", color = HuabuSilver, fontSize = 11.sp)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (gameOver) {
+                    Text(
+                        if (hitMine) "💥 You hit a mine!" else "🎉 Board cleared!",
+                        color = if (hitMine) Color(0xFFE74C3C) else Color(0xFF2ECC71),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Revealed: ${revealed.count { it !in mineIndices }}", color = HuabuSilver, fontSize = 11.sp)
+                        Text("Flagged: ${flagged.size}", color = Color(0xFFE74C3C), fontSize = 11.sp)
+                        Text("Mines: ${mineIndices.size}", color = HuabuGold, fontSize = 11.sp)
+                    }
+                }
+
+                // Grid
+                val cellSize = (280 / cols).dp
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    for (r in 0 until rows) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            for (c in 0 until cols) {
+                                val idx = r * cols + c
+                                val isRevealed = idx in revealed
+                                val isFlagged = idx in flagged
+                                val isMine = idx in mineIndices
+                                val cellVal = cells.getOrNull(idx)?.substringAfter(":") ?: "0"
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(cellSize)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(
+                                            when {
+                                                isRevealed && isMine -> Color(0xFFE74C3C).copy(0.5f)
+                                                isRevealed -> Color(0xFF1A1A2E)
+                                                isFlagged -> Color(0xFFE74C3C).copy(0.2f)
+                                                else -> Color(0xFF2A2A3E)
+                                            }
+                                        )
+                                        .clickable(enabled = !gameOver) {
+                                            if (isFlagged) {
+                                                flagged = flagged - idx
+                                            } else if (!isRevealed) {
+                                                revealCell(idx)
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val label = when {
+                                        isFlagged && !isRevealed -> "🚩"
+                                        isRevealed && isMine -> "💣"
+                                        isRevealed && cellVal != "0" -> cellVal
+                                        else -> ""
+                                    }
+                                    if (label.isNotEmpty()) {
+                                        Text(
+                                            label,
+                                            fontSize = (cellSize.value * 0.5f).sp,
+                                            color = when (cellVal) {
+                                                "1" -> Color(0xFF3498DB)
+                                                "2" -> Color(0xFF2ECC71)
+                                                "3" -> Color(0xFFE74C3C)
+                                                "4" -> Color(0xFF9B59B6)
+                                                "5" -> Color(0xFFE67E22)
+                                                "6" -> Color(0xFF1ABC9C)
+                                                "7" -> Color(0xFFE91E63)
+                                                "8" -> HuabuSilver
+                                                else -> HuabuOnSurface
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!gameOver) {
+                    Text(
+                        "Tap to reveal · Tap a revealed cell's neighbour to flag",
+                        color = HuabuSilver,
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (gameOver) "Close" else "Exit", color = HuabuSilver)
             }
         }
     )
