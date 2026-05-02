@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -1584,55 +1585,100 @@ private fun DraggableWidgetWrapper(
         return
     }
     
-    // Edit mode - wrap with draggable
+    // Edit mode - wrap with draggable and resizable
     var offset by remember(position) { mutableStateOf(position) }
+    var widgetSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize(0, 0)) }
+    var isResizing by remember { mutableStateOf(false) }
+    val gridSize = 20 // Grid snap size in pixels
     
     Box(
         modifier = Modifier
-            .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .offset { offset }
-            .pointerInput(widgetId) {
-                detectDragGestures(
-                    onDragEnd = { onDragEnd() },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        offset = IntOffset(
-                            offset.x + dragAmount.x.roundToInt(),
-                            offset.y + dragAmount.y.roundToInt()
-                        )
-                        onPositionChange(offset)
-                    }
-                )
-            }
+            .onSizeChanged { widgetSize = it }
     ) {
-        Column {
-            // Drag handle indicator
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(24.dp)
-                    .background(Color(0xFFEF4444).copy(alpha = 0.8f), RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
-                    .padding(horizontal = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.DragHandle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                    Text("DRAG TO MOVE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Icon(Icons.Filled.DragHandle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(widgetId) {
+                    detectDragGestures(
+                        onDragEnd = { 
+                            // Snap to grid on drag end
+                            val snappedX = (offset.x.toFloat() / gridSize).roundToInt() * gridSize
+                            val snappedY = (offset.y.toFloat() / gridSize).roundToInt() * gridSize
+                            offset = IntOffset(snappedX, snappedY)
+                            onPositionChange(offset)
+                            onDragEnd()
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            offset = IntOffset(
+                                offset.x + dragAmount.x.roundToInt(),
+                                offset.y + dragAmount.y.roundToInt()
+                            )
+                            onPositionChange(offset)
+                        }
+                    )
                 }
-            }
-            
-            // Actual widget content with border
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(2.dp, Color(0xFFEF4444), RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-            ) {
-                content()
+        ) {
+            Column {
+                // Drag handle indicator
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(24.dp)
+                        .background(Color(0xFFEF4444).copy(alpha = 0.8f), RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.DragHandle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Text("DRAG TO MOVE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Filled.DragHandle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    }
+                }
+                
+                // Actual widget content with border and resize handle
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(2.dp, Color(0xFFEF4444), RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                ) {
+                    content()
+                    
+                    // Resize handle at bottom-right corner
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(32.dp)
+                            .pointerInput(widgetId) {
+                                detectDragGestures(
+                                    onDragStart = { isResizing = true },
+                                    onDragEnd = { 
+                                        isResizing = false
+                                        onDragEnd()
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        // For now, we just indicate resizing is happening
+                                        // Full resize implementation would require more complex state management
+                                    }
+                                )
+                            }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.OpenInFull,
+                            contentDescription = "Resize",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier
+                                .size(20.dp)
+                                .align(Alignment.Center)
+                        )
+                    }
+                }
             }
         }
     }

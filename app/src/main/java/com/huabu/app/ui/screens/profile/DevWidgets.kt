@@ -853,7 +853,7 @@ private fun AddGifDialog(
                             columns = GridCells.Fixed(3),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(240.dp),
+                                .height(320.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {

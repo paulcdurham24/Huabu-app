@@ -30,8 +30,8 @@ android {
         applicationId = "com.huabu.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9       // increment by 1 for every Play Store upload
-        versionName = "1.8.0" // shown to users on the Play Store listing
+        versionCode = 10       // increment by 1 for every Play Store upload
+        versionName = "1.9.0" // shown to users on the Play Store listing
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -39,7 +39,7 @@ data class ProfileWidgetSettings(
     val showMood: Boolean = true,
     val showLocation: Boolean = true,
     // 3 separate GIF showcase boxes for independent positioning
-    val showGifShowcase1: Boolean = true,
+    val showGifShowcase1: Boolean = false,
     val showGifShowcase2: Boolean = false,
     val showGifShowcase3: Boolean = false,
     val widgetOrder: String = DEFAULT_WIDGET_ORDER,
